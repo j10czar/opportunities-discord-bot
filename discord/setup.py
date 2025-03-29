@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+import os
 
 from util import getDataFromJSON, saveDataToJSON
 
@@ -39,10 +40,17 @@ class Setup(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
+        # test mode logic; only processes the test server if enabled 
+        test_mode = os.getenv("TEST_MODE", "false").lower() == "true"
+        test_guild_id = int(os.getenv("TEST_GUILD_ID")) if test_mode else None
+
         # Load guild data and confirm guild info exists and is up-to-date
         existing_guilds = getDataFromJSON("guilds.json")
 
         for guild in self.bot.guilds:
+            if test_mode and guild.id != test_guild_id:
+                continue
+
             # Check if guild and opportunities channel exists within saved guild data
             exists = False
             up_to_date = False
@@ -72,6 +80,13 @@ class Setup(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
+        # in test mode only process join if it's the test server
+        test_mode = os.getenv("TEST_MODE", "false").lower() == "true"
+        if test_mode:
+            test_guild_id = int(os.getenv("TEST_GUILD_ID"))
+            if guild.id != test_guild_id:
+                return
+
         # Create opportunities channel if newly added to server
         channel = await setup_guild(self.bot, guild)
 
@@ -87,6 +102,13 @@ class Setup(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel):
+        # only process deletion of test server if in test mode 
+        test_mode = os.getenv("TEST_MODE", "false").lower() == "true"
+        if test_mode:
+            test_guild_id = int(os.getenv("TEST_GUILD_ID"))
+            if channel.guild.id != test_guild_id:
+                return
+
         # If opportunities channel was deleted, create new replacement channel
         existing_guilds = getDataFromJSON("guilds.json")
 
@@ -105,6 +127,13 @@ class Setup(commands.Cog):
     
     @commands.Cog.listener()
     async def on_guild_remove(self, guild):
+        # In test mode, only process removal if it's the test server.
+        test_mode = os.getenv("TEST_MODE", "false").lower() == "true"
+        if test_mode:
+            test_guild_id = int(os.getenv("TEST_GUILD_ID"))
+            if guild.id != test_guild_id:
+                return
+
         # Remove guild from guilds.json
         existing_guilds = getDataFromJSON("guilds.json")
         updated_guilds = [g for g in existing_guilds if g['id'] != guild.id]
