@@ -39,23 +39,16 @@ class PostListings(commands.Cog):
         if context in ["SUCCESS", "SETUP_COMPLETION", "ERROR"]:
             webhook_url = os.getenv("LOG_WEBHOOK_URL_TEST") if TEST_MODE else os.getenv("LOG_WEBHOOK_URL")
             if webhook_url:
-                asyncio.create_task(self.send_log_embed(message, context, webhook_url))
+                asyncio.create_task(self.send_log_message(message, context, webhook_url))
 
-    async def send_log_embed(self, message, context, webhook_url):
-        embed = discord.Embed(
-            title="Bot Log",
-            description=message,
-            color=0x5865f2,
-            timestamp=datetime.utcnow()
-        )
-        embed.add_field(name="Context", value=context, inline=True)
-        embed.set_footer(text="Bot Logger")
+    async def send_log_message(self, message, context, webhook_url):
+        content = f"[{context}] {message}"
         async with aiohttp.ClientSession() as session:
             try:
-                webhook = discord.Webhook.from_url(webhook_url, adapter=discord.AsyncWebhookAdapter(session))
-                await webhook.send(embed=embed, username="Bot Logger")
+                webhook = discord.Webhook.from_url(webhook_url, session=session)
+                await webhook.send(content=content, username="Bot Logger")
             except Exception as e:
-                self.log_message(f"Failed to send webhook embed: {e}", "WEBHOOK_ERROR")
+                print(f"Failed to send webhook message: {e}")
 
     def cog_unload(self):
         self.log_message("Unloading cog. Stopping post_listings loop.", "SUCCESS")
