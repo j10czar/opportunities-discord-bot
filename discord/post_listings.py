@@ -6,6 +6,8 @@ from bs4 import BeautifulSoup
 import os
 from dotenv import load_dotenv
 import util
+import aiohttp
+import asyncio
 
 
 # Set TEST_MODE to True for testing (loads dummy data)
@@ -34,8 +36,29 @@ class PostListings(commands.Cog):
         print(formatted_message,file=file, flush = True)
         print(formatted_message)
 
+        if context in ["SUCCESS", "SETUP_COMPLETION", "ERROR"]:
+            webhook_url = os.getenv("LOG_WEBHOOK_URL_TEST") if TEST_MODE else os.getenv("LOG_WEBHOOK_URL")
+            if webhook_url:
+                asyncio.create_task(self.send_log_embed(message, context, webhook_url))
+
+    async def send_log_embed(self, message, context, webhook_url):
+        embed = discord.Embed(
+            title="Bot Log",
+            description=message,
+            color=0x5865f2,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name="Context", value=context, inline=True)
+        embed.set_footer(text="Bot Logger")
+        async with aiohttp.ClientSession() as session:
+            try:
+                webhook = discord.Webhook.from_url(webhook_url, adapter=discord.AsyncWebhookAdapter(session))
+                await webhook.send(embed=embed, username="Bot Logger")
+            except Exception as e:
+                self.log_message(f"Failed to send webhook embed: {e}", "WEBHOOK_ERROR")
+
     def cog_unload(self):
-        self.log_message("Unloading cog. Stopping post_listings loop.", "UNLOAD")
+        self.log_message("Unloading cog. Stopping post_listings loop.", "SUCCESS")
         self.post_listings.cancel()
         file.close()
 
@@ -228,7 +251,7 @@ class PostListings(commands.Cog):
             else:
                 self.log_message("Fetching listings from S3.", "DATA_LOAD")
                 listings = util.getDataFromJSON("listings.json")
-                self.log_message(f"Number of listings succesfully fetched from S3: {len(listings)}", "DATA_LOAD") 
+                self.log_message(f"Number of listings succesfully fetched from S3: {len(listings)}", "SUCCESS") 
         except Exception as e:
             self.log_message(f"Error loading data: {e}", "ERROR")
 
@@ -252,7 +275,7 @@ class PostListings(commands.Cog):
             self.log_message("No listings to post.", "POST_LISTINGS")
             return
         
-        self.log_message(f"{len(listings)} listings to post", "POST_LISTINGS")
+        self.log_message(f"{len(listings)} listings to post", "SUCCESS")
         # Prepare embeds
         embeds = []
         for listing in listings:
@@ -279,7 +302,7 @@ class PostListings(commands.Cog):
             forum_channel = self.bot.get_channel(guild['channel'])
 
             if not forum_channel:
-                self.log_message(f"Channel {guild['channel']} with ID {forum_channel.id} not found or inaccessible.", "CHANNEL")
+                self.log_message(f"Channel {guild['channel']} with ID {forum_channel.id} not found or inaccessible.", "ERROR")
                 return
 
             # Determine the thread title based on the season
@@ -291,13 +314,15 @@ class PostListings(commands.Cog):
                     content=f"{role_mention} New internships posted for {thread_title}:"
                 )
                 thread = thread_with_message.thread  # Extract the thread object
-                self.log_message(f"Thread created: {thread.jump_url}", "THREAD")
+                self.log_message(f"Thread created: {thread.jump_url}", "SUCCESS")
 
                 # Send batches in the same thread
                 await self.send_batches_in_thread(thread, embeds)
 
             except Exception as e:
-                self.log_message(f"Error creating thread or posting messages: {e}")
+                self.log_message(f"Error creating thread or posting messages: {e}", "ERROR")
+
+            self.log_message(f"Job listings posted successfully to guild with id: {guild['id']}.", "SUCCESS")
 
             if TEST_MODE:
                 self.posted_today = True
@@ -334,7 +359,7 @@ class PostListings(commands.Cog):
         if current_batch:
             acm_logo = discord.File("acm_logo.png", filename="acm_logo.png")
             await thread.send(embeds=current_batch, files=[acm_logo])
-            self.log_message(f"Sent {len(current_batch)} embeds in the final batch.", "BATCH")
+            self.log_message(f"Sent {len(current_batch)} embeds in the final batch.", "SUCCESS")
 
 
     def create_embed(self, listing):
