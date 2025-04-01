@@ -256,14 +256,13 @@ class PostListings(commands.Cog):
 
         for guild in existing_guilds:
 
-            #TODO replace with role_id for specific server once scaling
-            role_id = 1314054737863245986 #this is the ping ID for the UF ACM server
+            role_id = guild['role']
             role_mention = f"<@&{role_id}>"
 
             forum_channel = self.bot.get_channel(guild['channel'])
 
             if not forum_channel:
-                self.log_message(f"Forum channel with ID {forum_channel_id} not found or inaccessible.")
+                self.log_message(f"Forum channel with ID {guild['channel']} not found or inaccessible.")
                 return
 
             # Determine the thread title based on the season
