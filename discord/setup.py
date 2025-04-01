@@ -1,4 +1,5 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from util import getDataFromJSON, saveDataToJSON
@@ -109,6 +110,21 @@ class Setup(commands.Cog):
         existing_guilds = getDataFromJSON("guilds.json")
         updated_guilds = [g for g in existing_guilds if g['id'] != guild.id]
         saveDataToJSON("guilds.json", updated_guilds)
+    
+    # Setup activate command
+    @app_commands.command(name="activate", description="Activate ACM Connect")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.describe(key="Activation key for ACM Connect")
+    async def activate(self, interaction: discord.Interaction, key: str):
+        await interaction.response.send_message(f"Received `{key}` as an activation key")
+    
+    # Setup configure command
+    @app_commands.command(name="configure", description="Configure ACM Connect")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.describe(channel="The channel you want the bot to post job opportunities in")
+    @app_commands.describe(role="The role that gets notified on job opportunity posting")
+    async def configure(self, interaction: discord.Interaction, channel: discord.ForumChannel, role: discord.Role):
+        await interaction.response.send_message(f"When job opportunities are posted, they will be posted in <#{channel.id}> and ping <@&{role.id}>")
 
 
 async def setup(bot):
