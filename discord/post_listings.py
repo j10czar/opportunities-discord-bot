@@ -279,7 +279,12 @@ class PostListings(commands.Cog):
         
         # Adding logic for exclusively running the bot in test mode
         if TEST_MODE:
+            # check to see if exists
             test_guild_id = int(os.getenv("TEST_GUILD_ID"))
+            if not test_guild_id:
+                self.log_message("TEST_GUILD_ID is not set in the enviroment file.", "ERROR")
+                return
+            
             # replaces existing guilds with only the test guild by id
             existing_guilds = [g for g in existing_guilds if g['id'] == test_guild_id]
 
