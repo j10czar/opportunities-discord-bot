@@ -18,12 +18,12 @@ class Setup(commands.Cog):
         saveDataToJSON("guilds.json", updated_guilds)
     
     # Setup activate command
-    @app_commands.command(name="activate", description="Activate ACM Connect")
+    @app_commands.command(name="activate", description=f"Activate ACM Connect")
     @app_commands.default_permissions(administrator=True)
     @app_commands.describe(key="Activation key for ACM Connect")
     async def activate(self, interaction: discord.Interaction, key: str):
         if interaction.guild is None:
-            await interaction.response.send_message("ACM Connect can only be activated inside a guild!")
+            await interaction.response.send_message(f"{self.bot.user.name} can only be activated inside a guild!")
             return
         
         existing_guilds = getDataFromJSON("guilds.json")
@@ -31,7 +31,7 @@ class Setup(commands.Cog):
         # Check if guild is already activated
         for existing_guild in existing_guilds:
             if existing_guild['id'] == interaction.guild_id:
-                await interaction.response.send_message("ACM Connect is already activated for this guild!")
+                await interaction.response.send_message(f"{self.bot.user.name} is already activated for this guild!")
                 return
         
         # Validate activation key
@@ -54,7 +54,7 @@ class Setup(commands.Cog):
     @app_commands.describe(role="The role that gets notified on job opportunity posting")
     async def configure(self, interaction: discord.Interaction, channel: typing.Optional[discord.ForumChannel], role: typing.Optional[discord.Role]):
         if interaction.guild is None:
-            await interaction.response.send_message("ACM Connect can only be configured inside a guild!")
+            await interaction.response.send_message(f"{self.bot.user.name} can only be configured inside a guild!")
             return
         
         if channel is None and role is None:
@@ -71,11 +71,13 @@ class Setup(commands.Cog):
                 break
         
         if existing_info is None:
-            await interaction.response.send_message("ACM Connect has not yet been activated for this guild! Please run `/activate`")
+            await interaction.response.send_message(f"{self.bot.user.name} has not yet been activated for this guild! Please run `/activate`")
             return
 
         # Update guild info
+        channel_updated = False
         if channel is not None:
+            channel_updated = channel.id != existing_info['channel']
             existing_info['channel'] = channel.id
         if role is not None:
             existing_info['role'] = role.id
@@ -86,7 +88,27 @@ class Setup(commands.Cog):
                 break
         saveDataToJSON("guilds.json", existing_guilds)
         
-        await interaction.response.send_message(f"✅ When job opportunities are posted, they will be posted in <#{channel.id}> and ping `@{role.name}`")
+        # If channel was updated, send info message in channel
+        if channel_updated:
+            acm_logo = discord.File("acm_logo.png", filename="acm_logo.png")
+            
+            embed = discord.Embed(
+                colour=discord.Colour(0x5865f2),
+                title="Info",
+                description=(
+                    f"The bot has successfully been configured to post to this forum channel (<#{channel.id}>)."
+                )
+            )
+            embed.set_thumbnail(url=f"attachment://{acm_logo.filename}")
+    
+            await channel.create_thread(
+                name=f"{self.bot.user.name} | UF ACM",
+                embed=embed,
+                files=[acm_logo]
+            )
+        
+        role_name = interaction.guild.get_role(existing_info['role']).name
+        await interaction.response.send_message(f"✅ When job opportunities are posted, they will be posted in <#{existing_info['channel']}> and ping `@{role_name}`")
 
 
 async def setup(bot):
