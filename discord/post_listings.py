@@ -259,6 +259,10 @@ class PostListings(commands.Cog):
             role_id = guild.get('role', 0)
             role_mention = f"<@&{role_id}>"
 
+            if 'channel' not in guild:
+                self.log_message(f"Guild with ID {guild['id']} has not yet configured a forum channel to post to.")
+                return
+            
             forum_channel = self.bot.get_channel(guild['channel'])
 
             if not forum_channel:
