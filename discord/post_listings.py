@@ -256,7 +256,7 @@ class PostListings(commands.Cog):
 
         for guild in existing_guilds:
 
-            role_id = guild['role']
+            role_id = guild.get('role', 0)
             role_mention = f"<@&{role_id}>"
 
             forum_channel = self.bot.get_channel(guild['channel'])

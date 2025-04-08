@@ -77,7 +77,7 @@ class Setup(commands.Cog):
         # Update guild info
         channel_updated = False
         if channel is not None:
-            channel_updated = channel.id != existing_info['channel']
+            channel_updated = channel.id != existing_info.get('channel')
             existing_info['channel'] = channel.id
         if role is not None:
             existing_info['role'] = role.id
@@ -107,8 +107,15 @@ class Setup(commands.Cog):
                 files=[acm_logo]
             )
         
-        role_name = interaction.guild.get_role(existing_info['role']).name
-        await interaction.response.send_message(f"✅ When job opportunities are posted, they will be posted in <#{existing_info['channel']}> and ping `@{role_name}`")
+        # Respond to slash command
+        if 'role' in existing_info and 'channel' in existing_info:
+            role_name = interaction.guild.get_role(existing_info['role']).name
+            await interaction.response.send_message(f"✅ When job opportunities are posted, they will be posted in <#{existing_info['channel']}> and ping `@{role_name}`.")
+        elif 'role' in existing_info:
+            role_name = interaction.guild.get_role(existing_info['role']).name
+            await interaction.response.send_message(f"✅ When job opportunities are posted, they will ping `@{role_name}`. **NOTE: Forum channel has not yet been configured!**")
+        else:
+            await interaction.response.send_message(f"✅ When job opportunities are posted, they will be posted in <#{existing_info['channel']}>. **NOTE: Role has not yet been configured!**")
 
 
 async def setup(bot):
