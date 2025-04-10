@@ -8,14 +8,13 @@ from dotenv import load_dotenv
 import util
 import aiohttp
 import asyncio
+from logger import Logger
 
 
 # Set TEST_MODE to True for testing (loads dummy data)
 load_dotenv()
 TEST_MODE = os.getenv("TEST_MODE") == "True"
-file = open("logging.txt","a")
-
-
+logger = Logger()
 
 
 # Define times for the loop (use 12:00 UTC daily for production)
@@ -26,45 +25,24 @@ class PostListings(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.posted_today = False  # Prevent multiple posts in TEST_MODE
-        self.log_message("Initializing PostListings cog", "INIT")
+        logger.log_message("Initializing PostListings cog", "INIT")
         self.post_listings.start()
 
-
-    def log_message(self, message, context):
-        timestamp = datetime.now().strftime("[%m/%d|%H:%M:%S]")
-        formatted_message = f"{timestamp} | {context} | {message}"
-        print(formatted_message,file=file, flush = True)
-        print(formatted_message)
-
-        if context in ["SUCCESS", "SETUP_COMPLETION", "ERROR"]:
-            webhook_url = os.getenv("LOG_WEBHOOK_URL_TEST") if TEST_MODE else os.getenv("LOG_WEBHOOK_URL")
-            if webhook_url:
-                asyncio.create_task(self.send_log_message(message, context, webhook_url))
-
-    async def send_log_message(self, message, context, webhook_url):
-        content = f"[{context}] {message}"
-        async with aiohttp.ClientSession() as session:
-            try:
-                webhook = discord.Webhook.from_url(webhook_url, session=session)
-                await webhook.send(content=content, username="Bot Logger")
-            except Exception as e:
-                print(f"Failed to send webhook message: {e}")
-
     def cog_unload(self):
-        self.log_message("Unloading cog. Stopping post_listings loop.", "SUCCESS")
+        logger.log_message("Unloading cog. Stopping post_listings loop.", "SUCCESS")
         self.post_listings.cancel()
-        file.close()
+        logger.close()
 
 
     @tasks.loop(time=times) if not TEST_MODE else tasks.loop(seconds = 5)
     async def post_listings(self):
         """Posts job listings to the specified channel."""
         if TEST_MODE and self.posted_today:
-            self.log_message("Skipping post: already posted today in TEST_MODE.", "POST_LISTINGS")
+            logger.log_message("Skipping post: already posted today in TEST_MODE.", "POST_LISTINGS")
             return
 
-        self.log_message("____Running post_listings loop____", "POST_LISTINGS")
-        self.log_message("Test Mode is " + str(TEST_MODE), "POST_LISTINGS")
+        logger.log_message("____Running post_listings loop____", "POST_LISTINGS")
+        logger.log_message("Test Mode is " + str(TEST_MODE), "POST_LISTINGS")
 
         try:
             
@@ -242,14 +220,14 @@ class PostListings(commands.Cog):
                     }
                 ]
             else:
-                self.log_message("Fetching listings from S3.", "DATA_LOAD")
+                logger.log_message("Fetching listings from S3.", "DATA_LOAD")
                 listings = util.getDataFromJSON("listings.json")
-                self.log_message(f"Number of listings succesfully fetched from S3: {len(listings)}", "SUCCESS") 
+                logger.log_message(f"Number of listings succesfully fetched from S3: {len(listings)}", "SUCCESS") 
         except Exception as e:
-            self.log_message(f"Error loading data: {e}", "ERROR")
+            logger.log_message(f"Error loading data: {e}", "ERROR")
 
         try:
-            self.log_message("Sorting listings...", "DATA_PROCESS")
+            logger.log_message("Sorting listings...", "DATA_PROCESS")
             util.sortListings(listings)
             today = datetime.now()
             # Subtract one day to get the previous day
@@ -258,17 +236,17 @@ class PostListings(commands.Cog):
             nine_pm_previous_day = datetime(previous_day.year, previous_day.month, previous_day.day, 2, 0, 0)
             # Convert to UNIX timestamp
             earliest_date = int(nine_pm_previous_day.timestamp()) if not TEST_MODE else 0
-            self.log_message("UNIX timestamp for earliest_date: "+str(earliest_date), "DATA_PROCESS")
+            logger.log_message("UNIX timestamp for earliest_date: "+str(earliest_date), "DATA_PROCESS")
             listings = util.filterSummer(listings, "2025", earliest_date=earliest_date)
 
         except Exception as e:
-            self.log_message("Error during filtering/sorting: " + str(e), "ERROR")
+            logger.log_message("Error during filtering/sorting: " + str(e), "ERROR")
 
         if not listings:
-            self.log_message("No listings to post.", "POST_LISTINGS")
+            logger.log_message("No listings to post.", "POST_LISTINGS")
             return
         
-        self.log_message(f"{len(listings)} listings to post", "SUCCESS")
+        logger.log_message(f"{len(listings)} listings to post", "SUCCESS")
         # Prepare embeds
         embeds = []
         for listing in listings:
@@ -282,14 +260,14 @@ class PostListings(commands.Cog):
             # check to see if exists
             test_guild_id = int(os.getenv("TEST_GUILD_ID"))
             if not test_guild_id:
-                self.log_message("TEST_GUILD_ID is not set in the enviroment file.", "ERROR")
+                logger.log_message("TEST_GUILD_ID is not set in the enviroment file.", "ERROR")
                 return
             
             # replaces existing guilds with only the test guild by id
             existing_guilds = [g for g in existing_guilds if g['id'] == test_guild_id]
 
-        self.log_message("Posting in the following guilds...", "CHANNEL")
-        self.log_message(existing_guilds, "CHANNEL")
+        logger.log_message("Posting in the following guilds...", "CHANNEL")
+        logger.log_message(existing_guilds, "CHANNEL")
 
         for guild in existing_guilds:
 
@@ -300,7 +278,7 @@ class PostListings(commands.Cog):
             forum_channel = self.bot.get_channel(guild['channel'])
 
             if not forum_channel:
-                self.log_message(f"Channel {guild['channel']} with ID {forum_channel.id} not found or inaccessible.", "ERROR")
+                logger.log_message(f"Channel {guild['channel']} with ID {forum_channel.id} not found or inaccessible.", "ERROR")
                 return
 
             # Determine the thread title based on the season
@@ -312,15 +290,15 @@ class PostListings(commands.Cog):
                     content=f"{role_mention} New internships posted for {thread_title}:"
                 )
                 thread = thread_with_message.thread  # Extract the thread object
-                self.log_message(f"Thread created: {thread.jump_url}", "SUCCESS")
+                logger.log_message(f"Thread created: {thread.jump_url}", "SUCCESS")
 
                 # Send batches in the same thread
                 await self.send_batches_in_thread(thread, embeds)
 
             except Exception as e:
-                self.log_message(f"Error creating thread or posting messages: {e}", "ERROR")
+                logger.log_message(f"Error creating thread or posting messages: {e}", "ERROR")
 
-            self.log_message(f"Job listings posted successfully to guild with id: {guild['id']}.", "SUCCESS")
+            logger.log_message(f"Job listings posted successfully to guild with id: {guild['id']}.", "SUCCESS")
 
             if TEST_MODE:
                 self.posted_today = True
@@ -346,18 +324,18 @@ class PostListings(commands.Cog):
                 # Post the current batch in the same thread
                 acm_logo = discord.File("acm_logo.png", filename="acm_logo.png")
                 await thread.send(embeds=current_batch, files=[acm_logo])
-                self.log_message(f"Sent {len(current_batch)} embeds in a batch.", "BATCH")
+                logger.log_message(f"Sent {len(current_batch)} embeds in a batch.", "BATCH")
                 current_batch = []
 
             # Add the current embed to the batch
             current_batch.append(embed)
 
-        self.log_message(f"Final batch size: {len(current_batch)}", "BATCH")
+        logger.log_message(f"Final batch size: {len(current_batch)}", "BATCH")
         # Post any remaining embeds
         if current_batch:
             acm_logo = discord.File("acm_logo.png", filename="acm_logo.png")
             await thread.send(embeds=current_batch, files=[acm_logo])
-            self.log_message(f"Sent {len(current_batch)} embeds in the final batch.", "SUCCESS")
+            logger.log_message(f"Sent {len(current_batch)} embeds in the final batch.", "SUCCESS")
 
 
     def create_embed(self, listing):
@@ -404,7 +382,7 @@ class PostListings(commands.Cog):
         if not listing['company_url'].startswith('https://simplify.jobs/c/'):
             return None
         
-        self.log_message(f"Fetching logo for {listing['company_name']}...", "LOGO")
+        logger.log_message(f"Fetching logo for {listing['company_name']}...", "LOGO")
         soup = BeautifulSoup(requests.get(listing["company_url"]).text, 'html.parser')
         img = soup.find(name='img', attrs={'alt': listing['company_name']})
         company_logo = img['src']
@@ -414,7 +392,7 @@ class PostListings(commands.Cog):
         }
         companies.append(company)
         util.saveDataToJSON("companies.json", companies)
-        self.log_message(f"Logo found and saved for {listing['company_name']}", "LOGO")
+        logger.log_message(f"Logo found and saved for {listing['company_name']}", "LOGO")
 
         return company_logo
 
@@ -437,7 +415,7 @@ class PostListings(commands.Cog):
     @post_listings.before_loop
     async def before_post_listings(self):
         await self.bot.wait_until_ready()
-        self.log_message("Bot is ready! Wating for 9:15EST...", "READY")
+        logger.log_message("Bot is ready! Wating for 9:15EST...", "READY")
 
 
 async def setup(bot):
