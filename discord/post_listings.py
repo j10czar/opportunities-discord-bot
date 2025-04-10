@@ -24,8 +24,8 @@ times = [time(hour=2, minute=15, second=0)]
 class PostListings(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.posted_today = False  # Prevent multiple posts in TEST_MODE
         logger.log_message("Initializing PostListings cog", "INIT")
+        self.posted_today = TEST_MODE  # Prevent multiple posts in TEST_MODE change this back to false if you would like to test the notifs
         self.post_listings.start()
 
     def cog_unload(self):
@@ -271,10 +271,13 @@ class PostListings(commands.Cog):
 
         for guild in existing_guilds:
 
-            #TODO replace with role_id for specific server once scaling
-            role_id = 1314054737863245986 #this is the ping ID for the UF ACM server
+            role_id = guild.get('role', 0)
             role_mention = f"<@&{role_id}>"
 
+            if 'channel' not in guild:
+                self.log_message(f"Guild with ID {guild['id']} has not yet configured a forum channel to post to.")
+                return
+            
             forum_channel = self.bot.get_channel(guild['channel'])
 
             if not forum_channel:

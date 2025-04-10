@@ -19,6 +19,9 @@ async def on_ready():
             type=discord.ActivityType.watching, name="for new opportunities!")
         await bot.change_presence(activity=activity)
         print(f'Logged in as {bot.user} (ID: {bot.user.id})')
+        
+        # Sync slash commands
+        await bot.tree.sync()
     except Exception as e:
         if bot.user.id == 0:
             print('Could not connect to channel. Make sure the token is valid.')
