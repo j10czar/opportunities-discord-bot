@@ -28,8 +28,30 @@ def getDataFromJSON(filename):
         print(f"Error retrieving {filename} from S3: {e}")
         return None 
 
-def saveDataToJSON(filename, data):
-    s3.put_object(Body=json.dumps(data), Bucket=bucket_name, Key=filename)
+def saveDataToJSON(filename, data, pretty=False):
+    s3.put_object(Body=json.dumps(data, indent=(4 if pretty else 0)), Bucket=bucket_name, Key=filename)
+
+def isValidActivationKey(key):
+    # Get activation keys from S3
+    activation_keys = getDataFromJSON("keys.json")
+    
+    # Check if key exists in list of activation keys
+    idx = -1
+    for i, activation_key in enumerate(activation_keys):
+        # Skip keys that have already been used
+        if activation_key.startswith("-"):
+            pass
+        
+        # Found matching activation key
+        if activation_key == key:
+            idx = i
+            break
+    if idx == -1:
+        return False
+
+    activation_keys[idx] = "-" + activation_keys[idx]
+    saveDataToJSON("keys.json", activation_keys, True)
+    return True
 
 
 def sortListings(listings):

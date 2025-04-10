@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 import typing
 
-from util import getDataFromJSON, saveDataToJSON
+from util import getDataFromJSON, saveDataToJSON, isValidActivationKey
 
 
 class Setup(commands.Cog):
@@ -35,8 +35,8 @@ class Setup(commands.Cog):
                 return
         
         # Validate activation key
-        if False:
-            await interaction.response.send_message(f"Invalid activation key `{key}` provided")
+        if not isValidActivationKey(key):
+            await interaction.response.send_message(f"Invalid activation key `{key}` provided!")
             return
         
         # Activate guild
