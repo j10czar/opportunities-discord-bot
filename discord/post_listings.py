@@ -25,7 +25,7 @@ class PostListings(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         logger.log_message("Initializing PostListings cog", "INIT")
-        self.posted_today = TEST_MODE  # Prevent multiple posts in TEST_MODE change this back to false if you would like to test the notifs
+        self.posted_today = False  # Prevent multiple posts in TEST_MODE change this back to false if you would like to test the notifs
         self.post_listings.start()
 
     def cog_unload(self):
