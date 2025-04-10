@@ -1,6 +1,8 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+import os
+from logger import Logger
 import typing
 
 from util import getDataFromJSON, saveDataToJSON
