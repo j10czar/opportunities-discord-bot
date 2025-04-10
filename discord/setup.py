@@ -7,6 +7,7 @@ import typing
 
 from util import getDataFromJSON, saveDataToJSON, isValidActivationKey
 
+logger = Logger()
 
 class Setup(commands.Cog):
     def __init__(self, bot):
@@ -18,6 +19,10 @@ class Setup(commands.Cog):
         existing_guilds = getDataFromJSON("guilds.json")
         updated_guilds = [g for g in existing_guilds if g['id'] != guild.id]
         saveDataToJSON("guilds.json", updated_guilds)
+
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild):
+        logger.log_message(f"Bot was added to guild: {guild.id} but has not been setup yet", "SUCCESS")
     
     # Setup activate command
     @app_commands.command(name="activate", description=f"Activate ACM Connect")
@@ -46,7 +51,8 @@ class Setup(commands.Cog):
             'id': interaction.guild_id
         })
         saveDataToJSON("guilds.json", existing_guilds)
-        
+        logger.log_message(f"Guild id: {interaction.guild_id} has activated its key and was added to guilds.json", "SUCCESS")
+
         await interaction.response.send_message("Guild has been successfully activated ✅")
     
     # Setup configure command
@@ -88,6 +94,9 @@ class Setup(commands.Cog):
             if existing_guild['id'] == interaction.guild_id:
                 existing_guild.update(existing_info)
                 break
+
+        logger.log_message(f"Updated configuration for guild {interaction.guild_id}: {existing_info}", "SETUP_COMPLETION")
+
         saveDataToJSON("guilds.json", existing_guilds)
         
         # If channel was updated, send info message in channel
@@ -108,6 +117,7 @@ class Setup(commands.Cog):
                 embed=embed,
                 files=[acm_logo]
             )
+        logger.log_message(f"Thread created in channel {channel.id} for guild {interaction.guild_id}", "SETUP_COMPLETION")
         
         # Respond to slash command
         if 'role' in existing_info and 'channel' in existing_info:
