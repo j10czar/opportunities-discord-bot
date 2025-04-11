@@ -19,6 +19,7 @@ class Setup(commands.Cog):
         existing_guilds = getDataFromJSON("guilds.json")
         updated_guilds = [g for g in existing_guilds if g['id'] != guild.id]
         saveDataToJSON("guilds.json", updated_guilds)
+        logger.log_message(f"Guild with guild id: {guild.id} removed from guilds.json", "SUCCESS")
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
