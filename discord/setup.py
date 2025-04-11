@@ -96,9 +96,8 @@ class Setup(commands.Cog):
                 existing_guild.update(existing_info)
                 break
 
-        logger.log_message(f"Updated configuration for guild {interaction.guild_id}: {existing_info}", "SETUP_COMPLETION")
-
         saveDataToJSON("guilds.json", existing_guilds)
+        logger.log_message(f"Guild id: {interaction.guild_id} was updated with: {existing_info}", "SETUP_COMPLETION")
         
         # If channel was updated, send info message in channel
         if channel_updated:
@@ -118,7 +117,7 @@ class Setup(commands.Cog):
                 embed=embed,
                 files=[acm_logo]
             )
-        logger.log_message(f"Thread created in channel {channel.id} for guild {interaction.guild_id}", "SETUP_COMPLETION")
+            logger.log_message(f"Thread created in channel {channel.id} for guild {interaction.guild_id} to update posting location", "SETUP_COMPLETION")
         
         # Respond to slash command
         if 'role' in existing_info and 'channel' in existing_info:
