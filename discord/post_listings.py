@@ -277,8 +277,35 @@ class PostListings(commands.Cog):
             # replaces existing guilds with only the test guild by id
             existing_guilds = [g for g in existing_guilds if g['id'] == test_guild_id]
 
+
         self.log_message("Posting in the following guilds...", "CHANNEL")
-        self.log_message(existing_guilds, "CHANNEL")
+        for g in existing_guilds:
+            guild = g['id']
+            discord_guild = self.bot.get_guild(g['id'])
+            if discord_guild is not None:
+                guild = discord_guild.name
+
+            guild_role = g.get('role', 'role-not-configured')
+            if 'role' in g:
+                discord_role = discord_guild.get_role(g['role'])
+                if discord_role is None:
+                    guild_role = 'role-deleted'
+                else:
+                    guild_role = discord_role.name
+
+            guild_channel = g.get('channel', 'channel-not-configured')
+            if 'channel' in g:
+                discord_channel = self.bot.get_channel(g['channel'])
+                if discord_channel is None:
+                    guild_channel = 'channel-deleted'
+                else:
+                    guild_channel = discord_channel.name
+            
+            self.log_message({
+                'guild': guild,
+                'role': guild_role,
+                'channel': guild_channel
+            }, "CHANNEL")
 
         for guild in existing_guilds:
 
