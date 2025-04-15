@@ -7,6 +7,8 @@ import typing
 
 from util import getDataFromJSON, saveDataToJSON, isValidActivationKey
 
+TEST_MODE = os.getenv("TEST_MODE") == "True"
+file = "test_guilds.json" if TEST_MODE else "guilds.json"
 
 class Setup(commands.Cog):
     def __init__(self, bot):
@@ -15,9 +17,9 @@ class Setup(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_remove(self, guild):
         # Remove guild from guilds.json
-        existing_guilds = getDataFromJSON("guilds.json")
+        existing_guilds = getDataFromJSON(file)
         updated_guilds = [g for g in existing_guilds if g['id'] != guild.id]
-        saveDataToJSON("guilds.json", updated_guilds)
+        saveDataToJSON(file, updated_guilds)
     
     # Setup activate command
     @app_commands.command(name="activate", description=f"Activate ACM Connect")
@@ -28,7 +30,7 @@ class Setup(commands.Cog):
             await interaction.response.send_message(f"{self.bot.user.name} can only be activated inside a guild!")
             return
         
-        existing_guilds = getDataFromJSON("guilds.json")
+        existing_guilds = getDataFromJSON(file)
         
         # Check if guild is already activated
         for existing_guild in existing_guilds:
@@ -45,7 +47,7 @@ class Setup(commands.Cog):
         existing_guilds.append({
             'id': interaction.guild_id
         })
-        saveDataToJSON("guilds.json", existing_guilds)
+        saveDataToJSON(file, existing_guilds)
         
         await interaction.response.send_message("Guild has been successfully activated ✅")
     
@@ -63,7 +65,7 @@ class Setup(commands.Cog):
             await interaction.response.send_message("No channel or role provided to configure!")
             return
         
-        existing_guilds = getDataFromJSON("guilds.json")
+        existing_guilds = getDataFromJSON(file)
         
         # Check if guild is not yet activated
         existing_info = None
@@ -88,7 +90,7 @@ class Setup(commands.Cog):
             if existing_guild['id'] == interaction.guild_id:
                 existing_guild.update(existing_info)
                 break
-        saveDataToJSON("guilds.json", existing_guilds)
+        saveDataToJSON(file, existing_guilds)
         
         # If channel was updated, send info message in channel
         if channel_updated:
