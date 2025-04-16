@@ -7,7 +7,7 @@ import aiohttp
 class Logger:
     def __init__(self):
         self.file = open("logging.txt", "a")
-        self.test_mode = os.getenv("TEST_MODE") == "True"
+        self.test_mode = os.getenv("TEST_MODE", "true").lower() == "true"
 
     def log_message(self, message, context):
         timestamp = datetime.now().strftime("[%m/%d|%H:%M:%S]")

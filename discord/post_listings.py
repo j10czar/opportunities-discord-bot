@@ -11,7 +11,7 @@ import asyncio
 
 # Set TEST_MODE to True for testing (loads dummy data)
 load_dotenv()
-TEST_MODE = os.getenv("TEST_MODE") == "True"
+TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
 file = open("logging.txt", "a")
 
 # Define times for the loop (use 12:00 UTC daily for production)
@@ -279,6 +279,11 @@ class PostListings(commands.Cog):
 
 
         self.log_message("Posting in the following guilds...", "CHANNEL")
+        for guild_data in existing_guilds:
+            guild_info = util.get_guild_info(guild_data, self.bot)
+            self.log_message(guild_info, "CHANNEL")
+
+        """
         for g in existing_guilds:
             guild = g['id']
             discord_guild = self.bot.get_guild(g['id'])
@@ -306,6 +311,7 @@ class PostListings(commands.Cog):
                 'role': guild_role,
                 'channel': guild_channel
             }, "CHANNEL")
+            """
 
         for guild in existing_guilds:
 
@@ -316,8 +322,7 @@ class PostListings(commands.Cog):
             forum_channel = self.bot.get_channel(guild['channel'])
 
             if not forum_channel:
-                self.log_message(f"Channel {guild['channel']} with ID {forum_channel.id} not found or inaccessible.",
-                                 "ERROR")
+                self.log_message(f"Channel with ID {guild['channel']} not found or inaccessible.", "ERROR")
                 return
 
             # Determine the thread title based on the season
@@ -329,7 +334,11 @@ class PostListings(commands.Cog):
                     content=f"{role_mention} New internships posted for {thread_title}:"
                 )
                 thread = thread_with_message.thread  # Extract the thread object
-                self.log_message(f"Thread created: {thread.jump_url}", "SUCCESS")
+
+                guild_info = util.get_guild_info(guild, self.bot)
+                guildName = guild_info['guild']
+
+                self.log_message(f"Thread created: {thread.jump_url} in server: {guildName}", "SUCCESS")
 
                 # Send batches in the same thread
                 await self.send_batches_in_thread(thread, embeds)
@@ -337,7 +346,10 @@ class PostListings(commands.Cog):
             except Exception as e:
                 self.log_message(f"Error creating thread or posting messages: {e}", "ERROR")
 
-            self.log_message(f"Job listings posted successfully to guild with id: {guild['id']}.", "SUCCESS")
+            guild_info = util.get_guild_info(guild, self.bot)
+            guildName = guild_info['guild']
+
+            self.log_message(f"Job listings posted successfully to guild: {guildName} with id: {guild['id']}.", "SUCCESS")
 
             if TEST_MODE:
                 self.posted_today = True
@@ -372,7 +384,6 @@ class PostListings(commands.Cog):
         if current_batch:
             acm_logo = discord.File("acm_logo.png", filename="acm_logo.png")
             await thread.send(embeds=current_batch, files=[acm_logo])
-            self.log_message(f"Sent {len(current_batch)} embeds in the final batch.", "SUCCESS")
 
     def create_embed(self, listing):
         """Create a Discord Embed object for a job listing."""
