@@ -309,7 +309,8 @@ class PostListings(commands.Cog):
             forum_channel = self.bot.get_channel(guild['channel'])
 
             if not forum_channel:
-                logger.log_message(f"Channel with ID {guild['channel']} not found or inaccessible.", "ERROR")
+                guild_info = util.get_guild_info(guild, self.bot)
+                logger.log_message(f"Channel in guild {guild_info['guild']} with channel ID {guild['channel']} not found or inaccessible.", "ERROR")
                 return
 
             # Determine the thread title based on the season
