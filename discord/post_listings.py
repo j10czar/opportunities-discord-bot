@@ -10,22 +10,19 @@ import aiohttp
 import asyncio
 from logger import Logger
 
-
 # Set TEST_MODE to True for testing (loads dummy data)
 load_dotenv()
-TEST_MODE = os.getenv("TEST_MODE") == "True"
+TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
 logger = Logger()
-
 
 # Define times for the loop (use 12:00 UTC daily for production)
 times = [time(hour=2, minute=15, second=0)]
-
 
 class PostListings(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         logger.log_message("Initializing PostListings cog", "INIT")
-        self.posted_today = TEST_MODE  # Prevent multiple posts in TEST_MODE change this back to false if you would like to test the notifs
+        self.posted_today = False  # Prevent multiple posts in TEST_MODE change this back to false if you would like to test the notifs
         self.post_listings.start()
 
     def cog_unload(self):
@@ -33,8 +30,7 @@ class PostListings(commands.Cog):
         self.post_listings.cancel()
         logger.close()
 
-
-    @tasks.loop(time=times) if not TEST_MODE else tasks.loop(seconds = 5)
+    @tasks.loop(time=times) if not TEST_MODE else tasks.loop(seconds=5)
     async def post_listings(self):
         """Posts job listings to the specified channel."""
         if TEST_MODE and self.posted_today:
@@ -45,7 +41,7 @@ class PostListings(commands.Cog):
         logger.log_message("Test Mode is " + str(TEST_MODE), "POST_LISTINGS")
 
         try:
-            
+
             # Load data
             if TEST_MODE:
                 listings = [
@@ -222,7 +218,7 @@ class PostListings(commands.Cog):
             else:
                 logger.log_message("Fetching listings from S3.", "DATA_LOAD")
                 listings = util.getDataFromJSON("listings.json")
-                logger.log_message(f"Number of listings succesfully fetched from S3: {len(listings)}", "SUCCESS") 
+                logger.log_message(f"Number of listings succesfully fetched from S3: {len(listings)}", "SUCCESS")
         except Exception as e:
             logger.log_message(f"Error loading data: {e}", "ERROR")
 
@@ -236,7 +232,7 @@ class PostListings(commands.Cog):
             nine_pm_previous_day = datetime(previous_day.year, previous_day.month, previous_day.day, 2, 0, 0)
             # Convert to UNIX timestamp
             earliest_date = int(nine_pm_previous_day.timestamp()) if not TEST_MODE else 0
-            logger.log_message("UNIX timestamp for earliest_date: "+str(earliest_date), "DATA_PROCESS")
+            logger.log_message("UNIX timestamp for earliest_date: " + str(earliest_date), "DATA_PROCESS")
             listings = util.filterSummer(listings, "2025", earliest_date=earliest_date)
 
         except Exception as e:
@@ -245,7 +241,7 @@ class PostListings(commands.Cog):
         if not listings:
             logger.log_message("No listings to post.", "POST_LISTINGS")
             return
-        
+
         logger.log_message(f"{len(listings)} listings to post", "SUCCESS")
         # Prepare embeds
         embeds = []
@@ -254,20 +250,52 @@ class PostListings(commands.Cog):
             embeds.append(embed)
 
         existing_guilds = util.getDataFromJSON("guilds.json")
-        
+
         # Adding logic for exclusively running the bot in test mode
         if TEST_MODE:
-            # check to see if exists
+            # check to see if it exists
             test_guild_id = int(os.getenv("TEST_GUILD_ID"))
             if not test_guild_id:
                 logger.log_message("TEST_GUILD_ID is not set in the enviroment file.", "ERROR")
                 return
-            
             # replaces existing guilds with only the test guild by id
             existing_guilds = [g for g in existing_guilds if g['id'] == test_guild_id]
 
+
         logger.log_message("Posting in the following guilds...", "CHANNEL")
-        logger.log_message(existing_guilds, "CHANNEL")
+        for guild_data in existing_guilds:
+            guild_info = util.get_guild_info(guild_data, self.bot)
+            logger.log_message(guild_info, "CHANNEL")
+
+        """
+        for g in existing_guilds:
+            guild = g['id']
+            discord_guild = self.bot.get_guild(g['id'])
+            if discord_guild is not None:
+                guild = discord_guild.name
+
+            guild_role = g.get('role', 'role-not-configured')
+            if 'role' in g:
+                discord_role = discord_guild.get_role(g['role'])
+                if discord_role is None:
+                    guild_role = 'role-deleted'
+                else:
+                    guild_role = discord_role.name
+
+            guild_channel = g.get('channel', 'channel-not-configured')
+            if 'channel' in g:
+                discord_channel = self.bot.get_channel(g['channel'])
+                if discord_channel is None:
+                    guild_channel = 'channel-deleted'
+                else:
+                    guild_channel = discord_channel.name
+            
+            self.log_message({
+                'guild': guild,
+                'role': guild_role,
+                'channel': guild_channel
+            }, "CHANNEL")
+            """
 
         for guild in existing_guilds:
 
@@ -275,13 +303,14 @@ class PostListings(commands.Cog):
             role_mention = f"<@&{role_id}>"
 
             if 'channel' not in guild:
-                self.log_message(f"Guild with ID {guild['id']} has not yet configured a forum channel to post to.")
-                return
-            
+                 logger.log_message(f"Guild with ID {guild['id']} has not yet configured a forum channel to post to.")
+                 return
+
             forum_channel = self.bot.get_channel(guild['channel'])
 
             if not forum_channel:
-                logger.log_message(f"Channel {guild['channel']} with ID {forum_channel.id} not found or inaccessible.", "ERROR")
+                guild_info = util.get_guild_info(guild, self.bot)
+                logger.log_message(f"Channel in guild {guild_info['guild']} with channel ID {guild['channel']} not found or inaccessible.", "ERROR")
                 return
 
             # Determine the thread title based on the season
@@ -293,7 +322,11 @@ class PostListings(commands.Cog):
                     content=f"{role_mention} New internships posted for {thread_title}:"
                 )
                 thread = thread_with_message.thread  # Extract the thread object
-                logger.log_message(f"Thread created: {thread.jump_url}", "SUCCESS")
+
+                guild_info = util.get_guild_info(guild, self.bot)
+                guildName = guild_info['guild']
+
+                logger.log_message(f"Thread created: {thread.jump_url} in server: {guildName}", "SUCCESS")
 
                 # Send batches in the same thread
                 await self.send_batches_in_thread(thread, embeds)
@@ -301,12 +334,13 @@ class PostListings(commands.Cog):
             except Exception as e:
                 logger.log_message(f"Error creating thread or posting messages: {e}", "ERROR")
 
-            logger.log_message(f"Job listings posted successfully to guild with id: {guild['id']}.", "SUCCESS")
+            guild_info = util.get_guild_info(guild, self.bot)
+            guildName = guild_info['guild']
+
+            logger.log_message(f"Job listings posted successfully to guild: {guildName} with id: {guild['id']}.", "SUCCESS")
 
             if TEST_MODE:
                 self.posted_today = True
-
-
 
     async def send_batches_in_thread(self, thread, embeds):
         """Send embeds in batches within the same thread."""
@@ -333,13 +367,11 @@ class PostListings(commands.Cog):
             # Add the current embed to the batch
             current_batch.append(embed)
 
-        logger.log_message(f"Final batch size: {len(current_batch)}", "BATCH")
         # Post any remaining embeds
         if current_batch:
             acm_logo = discord.File("acm_logo.png", filename="acm_logo.png")
             await thread.send(embeds=current_batch, files=[acm_logo])
             logger.log_message(f"Sent {len(current_batch)} embeds in the final batch.", "SUCCESS")
-
 
     def create_embed(self, listing):
         """Create a Discord Embed object for a job listing."""
@@ -359,11 +391,11 @@ class PostListings(commands.Cog):
         # Set author with company name and URL
         if listing["company_url"]:
             embed.set_author(name=listing["company_name"], url=listing["company_url"])
-            
+
             # Set thumbnail with company logo
             company_logo = self.get_company_logo(listing)
             embed.set_thumbnail(url=company_logo)
-        
+
         # Set footer with logo and last updated timestamp
         acm_logo_path = "acm_logo.png"
         embed.set_footer(
@@ -371,7 +403,6 @@ class PostListings(commands.Cog):
             icon_url=f"attachment://{acm_logo_path}"
         )
         return embed
-
 
     def get_company_logo(self, listing):
         """Gets the company logo for a listing"""
@@ -384,7 +415,7 @@ class PostListings(commands.Cog):
         # Create request to Simplify company page, and scrape company logo
         if not listing['company_url'].startswith('https://simplify.jobs/c/'):
             return None
-        
+
         logger.log_message(f"Fetching logo for {listing['company_name']}...", "LOGO")
         soup = BeautifulSoup(requests.get(listing["company_url"]).text, 'html.parser')
         img = soup.find(name='img', attrs={'alt': listing['company_name']})
@@ -399,9 +430,9 @@ class PostListings(commands.Cog):
 
         return company_logo
 
-
     def generate_thread_title(self, today):
         """Generate a thread title based on the season and date."""
+
         def get_season(month):
             if 8 <= month <= 12:  # August to December
                 return "FALL"

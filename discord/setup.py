@@ -5,10 +5,12 @@ import os
 from logger import Logger
 import typing
 
-from util import getDataFromJSON, saveDataToJSON, isValidActivationKey
+from util import getDataFromJSON, saveDataToJSON, isValidActivationKey, get_guild_info
 
+logger = Logger()
 TEST_MODE = os.getenv("TEST_MODE") == "True"
 file = "test_guilds.json" if TEST_MODE else "guilds.json"
+
 
 class Setup(commands.Cog):
     def __init__(self, bot):
@@ -19,6 +21,15 @@ class Setup(commands.Cog):
         # Remove guild from guilds.json
         existing_guilds = getDataFromJSON(file)
         updated_guilds = [g for g in existing_guilds if g['id'] != guild.id]
+        guild_info = get_guild_info({'id': guild.id}, self.bot)
+        saveDataToJSON(file, updated_guilds)
+        logger.log_message(f"Guild {guild_info['guild']} with guild id: {guild.id} removed from guilds.json", "SUCCESS")
+
+
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild):
+        guild_info = get_guild_info({'id': guild.id}, self.bot)
+        logger.log_message(f"Bot was added to guild: {guild_info['guild']} with id: {guild.id} but has not been setup yet", "SUCCESS")
         saveDataToJSON(file, updated_guilds)
     
     # Setup activate command
@@ -47,8 +58,8 @@ class Setup(commands.Cog):
         existing_guilds.append({
             'id': interaction.guild_id
         })
+        logger.log_message(f"Guild id: {interaction.guild_id} has activated its key and was added to guilds.json", "SUCCESS")
         saveDataToJSON(file, existing_guilds)
-        
         await interaction.response.send_message("Guild has been successfully activated ✅")
     
     # Setup configure command
@@ -90,6 +101,8 @@ class Setup(commands.Cog):
             if existing_guild['id'] == interaction.guild_id:
                 existing_guild.update(existing_info)
                 break
+
+        logger.log_message(f"Guild {get_guild_info(existing_info, self.bot)['guild']} was updated with: {existing_info}", "SETUP_COMPLETION")
         saveDataToJSON(file, existing_guilds)
         
         # If channel was updated, send info message in channel
@@ -110,6 +123,7 @@ class Setup(commands.Cog):
                 embed=embed,
                 files=[acm_logo]
             )
+            logger.log_message(f"Thread created in channel {channel.id} for guild {interaction.guild_id} to update posting location", "SETUP_COMPLETION")
         
         # Respond to slash command
         if 'role' in existing_info and 'channel' in existing_info:

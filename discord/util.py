@@ -102,3 +102,34 @@ def filterSummer(listings, year, earliest_date=0):
 
  
     return filtered
+
+def get_guild_info(guild_data, bot):
+    """
+    Get formatted guild information including name, role, and channel
+    
+    Arguments:
+        guild_data (json): json containing guild data (id, role, channel)
+        bot (discord object): the discord bot instance
+        
+    Returns:
+        json: json containing formatted guild information
+    """
+    guild_info = {
+        'guild': guild_data['id'], 
+        'role': 'role-not-configured',
+        'channel': 'channel-not-configured'
+    }
+    
+    discord_guild = bot.get_guild(guild_data['id'])
+    if discord_guild is not None:
+        guild_info['guild'] = discord_guild.name
+        
+        if 'role' in guild_data:
+            discord_role = discord_guild.get_role(guild_data['role'])
+            guild_info['role'] = discord_role.name if discord_role else 'role-deleted'
+            
+        if 'channel' in guild_data:
+            discord_channel = bot.get_channel(guild_data['channel'])
+            guild_info['channel'] = discord_channel.name if discord_channel else 'channel-deleted'
+    
+    return guild_info
