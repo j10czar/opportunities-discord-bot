@@ -34,7 +34,7 @@ class PostListings(commands.Cog):
     async def post_listings(self):
         """Posts job listings to the specified channel."""
         if TEST_MODE and self.posted_today:
-            logger.log_message("Skipping post: already posted today in TEST_MODE.", "POST_LISTINGS")
+            logger.log_message("Skipping post: already posted today in TEST_MODE. (posted_today is True)", "POST_LISTINGS")
             return
 
         logger.log_message("____Running post_listings loop____", "POST_LISTINGS")
@@ -249,17 +249,11 @@ class PostListings(commands.Cog):
             embed = self.create_embed(listing)
             embeds.append(embed)
 
-        existing_guilds = util.getDataFromJSON("guilds.json")
-
         # Adding logic for exclusively running the bot in test mode
         if TEST_MODE:
-            # check to see if it exists
-            test_guild_id = int(os.getenv("TEST_GUILD_ID"))
-            if not test_guild_id:
-                logger.log_message("TEST_GUILD_ID is not set in the enviroment file.", "ERROR")
-                return
-            # replaces existing guilds with only the test guild by id
-            existing_guilds = [g for g in existing_guilds if g['id'] == test_guild_id]
+            existing_guilds = util.getDataFromJSON("test_guilds.json")
+        else:
+            existing_guilds = util.getDataFromJSON("guilds.json")
 
 
         logger.log_message("Posting in the following guilds...", "CHANNEL")
@@ -267,35 +261,6 @@ class PostListings(commands.Cog):
             guild_info = util.get_guild_info(guild_data, self.bot)
             logger.log_message(guild_info, "CHANNEL")
 
-        """
-        for g in existing_guilds:
-            guild = g['id']
-            discord_guild = self.bot.get_guild(g['id'])
-            if discord_guild is not None:
-                guild = discord_guild.name
-
-            guild_role = g.get('role', 'role-not-configured')
-            if 'role' in g:
-                discord_role = discord_guild.get_role(g['role'])
-                if discord_role is None:
-                    guild_role = 'role-deleted'
-                else:
-                    guild_role = discord_role.name
-
-            guild_channel = g.get('channel', 'channel-not-configured')
-            if 'channel' in g:
-                discord_channel = self.bot.get_channel(g['channel'])
-                if discord_channel is None:
-                    guild_channel = 'channel-deleted'
-                else:
-                    guild_channel = discord_channel.name
-            
-            self.log_message({
-                'guild': guild,
-                'role': guild_role,
-                'channel': guild_channel
-            }, "CHANNEL")
-            """
 
         for guild in existing_guilds:
 
