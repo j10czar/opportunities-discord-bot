@@ -30,7 +30,6 @@ class Setup(commands.Cog):
     async def on_guild_join(self, guild):
         guild_info = get_guild_info({'id': guild.id}, self.bot)
         logger.log_message(f"Bot was added to guild: {guild_info['guild']} with id: {guild.id} but has not been setup yet", "SUCCESS")
-        saveDataToJSON(file, updated_guilds)
     
     # Setup activate command
     @app_commands.command(name="activate", description=f"Activate ACM Connect")
