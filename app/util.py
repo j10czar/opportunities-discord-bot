@@ -28,8 +28,30 @@ def getDataFromJSON(filename):
         print(f"Error retrieving {filename} from S3: {e}")
         return None 
 
-def saveDataToJSON(filename, data):
-    s3.put_object(Body=json.dumps(data), Bucket=bucket_name, Key=filename)
+def saveDataToJSON(filename, data, pretty=False):
+    s3.put_object(Body=json.dumps(data, indent=(4 if pretty else 0)), Bucket=bucket_name, Key=filename)
+
+def isValidActivationKey(key):
+    # Get activation keys from S3
+    activation_keys = getDataFromJSON("keys.json")
+    
+    # Check if key exists in list of activation keys
+    idx = -1
+    for i, activation_key in enumerate(activation_keys):
+        # Skip keys that have already been used
+        if activation_key.startswith("-"):
+            pass
+        
+        # Found matching activation key
+        if activation_key == key:
+            idx = i
+            break
+    if idx == -1:
+        return False
+
+    activation_keys[idx] = "-" + activation_keys[idx]
+    saveDataToJSON("keys.json", activation_keys, True)
+    return True
 
 
 def sortListings(listings):
@@ -80,3 +102,34 @@ def filterSummer(listings, year, earliest_date=0):
 
  
     return filtered
+
+def get_guild_info(guild_data, bot):
+    """
+    Get formatted guild information including name, role, and channel
+    
+    Arguments:
+        guild_data (json): json containing guild data (id, role, channel)
+        bot (discord object): the discord bot instance
+        
+    Returns:
+        json: json containing formatted guild information
+    """
+    guild_info = {
+        'guild': guild_data['id'], 
+        'role': 'role-not-configured',
+        'channel': 'channel-not-configured'
+    }
+    
+    discord_guild = bot.get_guild(guild_data['id'])
+    if discord_guild is not None:
+        guild_info['guild'] = discord_guild.name
+        
+        if 'role' in guild_data:
+            discord_role = discord_guild.get_role(guild_data['role'])
+            guild_info['role'] = discord_role.name if discord_role else 'role-deleted'
+            
+        if 'channel' in guild_data:
+            discord_channel = bot.get_channel(guild_data['channel'])
+            guild_info['channel'] = discord_channel.name if discord_channel else 'channel-deleted'
+    
+    return guild_info
