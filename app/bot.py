@@ -12,6 +12,10 @@ intents.messages = True  # Ensure this is enabled
 
 bot = commands.Bot(command_prefix="", intents=intents)
 
+TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
+
+token = os.getenv("TEST_BOT_TOKEN") if TEST_MODE else os.getenv("BOT_TOKEN")
+
 @bot.event
 async def on_ready():
     try:
@@ -31,7 +35,7 @@ async def on_ready():
 async def main():
     await bot.load_extension("setup")
     await bot.load_extension("post_listings")
-    await bot.start(os.getenv("BOT_TOKEN"))
+    await bot.start(token)
 
 if __name__ == "__main__":
     asyncio.run(main())
