@@ -19,19 +19,34 @@ logger = Logger()
 times = [time(hour=2, minute=15, second=0)]
 
 class PostListings(commands.Cog):
+     # ──────────────────────────────────────────────────────────────────────────
+    # Initializes the cog, starts the scheduled loop, and keeps a flag to avoid
+    # duplicate posts when running in TEST_MODE every 5 s.
+    # ──────────────────────────────────────────────────────────────────────────
     def __init__(self, bot):
         self.bot = bot
         logger.log_message("Initializing PostListings cog", "INIT")
         self.posted_today = False  # Prevent multiple posts in TEST_MODE change this back to false if you would like to test the notifs
         self.post_listings.start()
 
+# ──────────────────────────────────────────────────────────────────────────
+    # Gracefully shuts down: stops the loop and closes the custom logger.
+    # ──────────────────────────────────────────────────────────────────────────
     def cog_unload(self):
         logger.log_message("Unloading cog. Stopping post_listings loop.", "SUCCESS")
         self.post_listings.cancel()
         logger.close()
 
+# ──────────────────────────────────────────────────────────────────────────
+    # Main scheduled task: runs nightly (or every 5 s in TEST_MODE), fetches
+    # listings, filters/sorts them, and posts to the configured Discord forums.
+    # A heartbeat entry is logged every execution.
+    # ──────────────────────────────────────────────────────────────────────────
     @tasks.loop(time=times) if not TEST_MODE else tasks.loop(seconds=5)
     async def post_listings(self):
+
+        logger.log_message("post_listings tick ✅", "HEARTBEAT")
+
         """Posts job listings to the specified channel."""
         if TEST_MODE and self.posted_today:
             logger.log_message("Skipping post: already posted today in TEST_MODE. (posted_today is True)", "POST_LISTINGS")
@@ -140,6 +155,10 @@ class PostListings(commands.Cog):
             if TEST_MODE:
                 self.posted_today = True
 
+ # ──────────────────────────────────────────────────────────────────────────
+    # Sends embeds in batches of ≤10 or ≤2000 characters inside one thread,
+    # respecting Discord’s embed limits.
+    # ──────────────────────────────────────────────────────────────────────────
     async def send_batches_in_thread(self, thread, embeds):
         """Send embeds in batches within the same thread."""
         MAX_EMBEDS = 10
@@ -171,6 +190,9 @@ class PostListings(commands.Cog):
             await thread.send(embeds=current_batch, files=[acm_logo])
             logger.log_message(f"Sent {len(current_batch)} embeds in the final batch.", "SUCCESS")
 
+ # ──────────────────────────────────────────────────────────────────────────
+    # Builds a Discord Embed object from a single listing dictionary.
+    # ──────────────────────────────────────────────────────────────────────────
     def create_embed(self, listing):
         """Create a Discord Embed object for a job listing."""
         # Purple embed color
@@ -202,6 +224,9 @@ class PostListings(commands.Cog):
         )
         return embed
 
+# ──────────────────────────────────────────────────────────────────────────
+    # Retrieves (and caches) the company logo URL; scrapes Simplify if needed.
+    # ──────────────────────────────────────────────────────────────────────────
     def get_company_logo(self, listing):
         """Gets the company logo for a listing"""
         # Check if company logo is already saved
@@ -228,6 +253,10 @@ class PostListings(commands.Cog):
 
         return company_logo
 
+  # ──────────────────────────────────────────────────────────────────────────
+    # Generates the thread title like “SPRING 25: April 26”, based on today’s
+    # date and a simple season heuristic.
+    # ──────────────────────────────────────────────────────────────────────────
     def generate_thread_title(self, today):
         """Generate a thread title based on the season and date."""
 
@@ -244,10 +273,27 @@ class PostListings(commands.Cog):
         adjusted_date = today - timedelta(days=1)
         return f"{season} {adjusted_date.year % 100}: {adjusted_date.strftime('%B %d')}"
 
+ # ──────────────────────────────────────────────────────────────────────────
+    # Waits until the bot is connected before starting the loop; logs readiness.
+    # ──────────────────────────────────────────────────────────────────────────
     @post_listings.before_loop
     async def before_post_listings(self):
         await self.bot.wait_until_ready()
         logger.log_message("Bot is ready! Wating for 9:15EST...", "READY")
+
+ # ──────────────────────────────────────────────────────────────────────────
+    # Catches uncaught exceptions inside the scheduled loop, logs them, and
+    # restarts the loop to prevent silent failures.
+    # ──────────────────────────────────────────────────────────────────────────
+    @post_listings.error
+    async def post_error(self, exc):               # <─ NEW
+        logger.log_message(f"post_listings crashed: {exc!r}", "ERROR")
+
+        try:
+            self.post_listings.restart()
+            logger.log_message("post_listings loop restarted", "SUCCESS")
+        except RuntimeError:
+            pass
 
 
 async def setup(bot):
