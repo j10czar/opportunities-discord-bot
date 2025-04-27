@@ -25,7 +25,7 @@ class PostListings(commands.Cog):
     # ──────────────────────────────────────────────────────────────────────────
     def __init__(self, bot):
         self.bot = bot
-        logger.log_message("Initializing PostListings cog", "INIT")
+        logger.log_message("Initializing PostListings cog - Bot Restarted!", "INFO")
         self.posted_today = False  # Prevent multiple posts in TEST_MODE change this back to false if you would like to test the notifs
         self.post_listings.start()
 
@@ -45,7 +45,7 @@ class PostListings(commands.Cog):
     @tasks.loop(time=times) if not TEST_MODE else tasks.loop(seconds=5)
     async def post_listings(self):
 
-        logger.log_message("post_listings tick ✅", "HEARTBEAT")
+        logger.log_message("post_listings tick", "HEARTBEAT")
 
         """Posts job listings to the specified channel."""
         if TEST_MODE and self.posted_today:
@@ -87,7 +87,7 @@ class PostListings(commands.Cog):
             logger.log_message("Error during filtering/sorting: " + str(e), "ERROR")
 
         if not listings:
-            logger.log_message("No listings to post.", "POST_LISTINGS")
+            logger.log_message("No listings to post.", "INFO")
             return
 
         logger.log_message(f"{len(listings)} listings to post", "SUCCESS")
@@ -139,7 +139,7 @@ class PostListings(commands.Cog):
                 guild_info = util.get_guild_info(guild, self.bot)
                 guildName = guild_info['guild']
 
-                logger.log_message(f"Thread created: {thread.jump_url} in server: {guildName}", "SUCCESS")
+                logger.log_message(f"Thread created: {thread.jump_url} in server: {guildName}", "POST_LISTINGS")
 
                 # Send batches in the same thread
                 await self.send_batches_in_thread(thread, embeds)
@@ -171,7 +171,7 @@ class PostListings(commands.Cog):
                 total_size += len(embed.title or "") + len(embed.description or "")
                 total_size += sum(len(field.name or "") + len(field.value or "") for field in embed.fields)
                 total_size += len(embed.footer.text or "") if embed.footer else 0
-                return total_size
+            return total_size
 
         for embed in embeds:
             if len(current_batch) >= MAX_EMBEDS or calculate_batch_size(current_batch + [embed]) > MAX_CHARACTERS:
@@ -188,7 +188,7 @@ class PostListings(commands.Cog):
         if current_batch:
             acm_logo = discord.File("acm_logo.png", filename="acm_logo.png")
             await thread.send(embeds=current_batch, files=[acm_logo])
-            logger.log_message(f"Sent {len(current_batch)} embeds in the final batch.", "SUCCESS")
+            logger.log_message(f"Sent {len(current_batch)} embeds in the final batch.", "POST_LISTINGS")
 
  # ──────────────────────────────────────────────────────────────────────────
     # Builds a Discord Embed object from a single listing dictionary.
