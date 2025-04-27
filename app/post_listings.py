@@ -45,7 +45,6 @@ class PostListings(commands.Cog):
     @tasks.loop(time=times) if not TEST_MODE else tasks.loop(seconds=5)
     async def post_listings(self):
 
-        logger.log_message("post_listings tick", "HEARTBEAT")
 
         """Posts job listings to the specified channel."""
         if TEST_MODE and self.posted_today:
@@ -123,7 +122,7 @@ class PostListings(commands.Cog):
 
             if not forum_channel:
                 guild_info = util.get_guild_info(guild, self.bot)
-                logger.log_message(f"Channel in guild {guild_info['guild']} with channel ID {guild['channel']} not found or inaccessible.", "ERROR")
+                logger.log_message(f"Channel in guild {guild_info['guild']} with channel ID {guild['channel']} not found or inaccessible.", "WARNING")
                 return
 
             # Determine the thread title based on the season

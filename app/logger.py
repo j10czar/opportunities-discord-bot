@@ -32,7 +32,7 @@ class Logger:
         print(formatted_message, file=self.file, flush=True)
         print(formatted_message)
 
-        if context in ["SUCCESS", "SETUP_COMPLETION", "ERROR", "INFO", "HEARTBEAT"]:
+        if context in ["SUCCESS", "SETUP_COMPLETION", "ERROR", "INFO", "WARNING"]:
             webhook_url = (
                 os.getenv("LOG_WEBHOOK_URL_TEST")
                 if self.test_mode
