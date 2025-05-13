@@ -3,11 +3,11 @@
 
 # ── imports & page config (FIRST Streamlit call) ─────────────────────────
 import streamlit as st
-st.set_page_config(page_title="ACM Guild Admin",
+st.set_page_config(page_title="ACM Connect Admin Dashboard",
                    page_icon="🛠️",
                    layout="centered")
 
-import os, json, boto3, pandas as pd
+import os, json, boto3, pandas as pd, secrets
 from dotenv import load_dotenv
 
 # ── AWS / S3 helpers ─────────────────────────────────────────────────────
@@ -35,6 +35,7 @@ def upload_json(key: str, data):
                   Body=json.dumps(data, indent=4).encode())
 
 # ── dataframe helper (id, name first) ────────────────────────────────────
+
 def to_df(records):
     """Cast all values to str; order columns: id, name, everything else."""
     if not records:
@@ -49,6 +50,7 @@ def df_test(): return to_df(fetch_json("test_guilds.json"))
 def df_prod(): return to_df(fetch_json("guilds.json"))
 
 # ── revoke helpers (hard delete) ─────────────────────────────────────────
+
 def revoke_entry(guild_id: str, filename: str) -> bool:
     """Delete entry from <filename>; return True if removed."""
     rows = fetch_json(filename)
@@ -58,12 +60,43 @@ def revoke_entry(guild_id: str, filename: str) -> bool:
     upload_json(filename, new_rows)
     return True
 
-# activation-key helper stays unchanged
+# activation‑key helper stays unchanged
+
 def get_next_unused_key():
     for k in fetch_json("keys.json"):
         if not k.startswith("-"):
             return k
     return "No Keys Left!"
+
+# ── key‑management helpers ───────────────────────────────────────────────
+
+def fetch_keys():
+    return fetch_json("keys.json")
+
+
+def save_keys(keys):
+    upload_json("keys.json", keys)
+
+
+def key_counts(keys):
+    used = sum(1 for k in keys if k.startswith("-"))
+    unused = len(keys) - used
+    return used, unused
+
+
+def add_new_keys(n: int):
+    """Generate <n> unique 32‑char hex keys and append to keys.json."""
+    keys = fetch_keys()
+    existing = set(k.lstrip("-") for k in keys)  # strip dashes for uniqueness
+    added = []
+    while len(added) < n:
+        k = secrets.token_hex(16)
+        if k not in existing:
+            added.append(k)
+            existing.add(k)
+    keys.extend(added)
+    save_keys(keys)
+    return added
 
 # ── Streamlit UI ─────────────────────────────────────────────────────────
 st.title("ACM Guild Admin Panel")
@@ -127,4 +160,35 @@ with right:
             st.success(f"Test guild {gid_test} deleted.")
         else:
             st.error("Guild ID not found in test list.")
+
+# ── key management UI -----------------------------------------------------
+st.divider()
+st.header("🔑 Key Management")
+
+all_keys = fetch_keys()
+used_ct, unused_ct = key_counts(all_keys)
+
+# Display counts like a dashboard metric
+st.markdown(
+    f"**Keys in circulation (unused):** {unused_ct} of {len(all_keys)} — **Used:** {used_ct}")
+
+km_col1, km_col2 = st.columns(2)
+
+# -- generate new keys --
+with km_col1:
+    st.subheader("➕ Add New Keys")
+    num_new = st.number_input("Number of keys to generate", min_value=1, max_value=100, value=1, step=1)
+    if st.button("Add Keys"):
+        added = add_new_keys(int(num_new))
+        st.success(f"Added {len(added)} new keys.")
+
+# -- fetch next key (duplicate of original but placed here for convenience) --
+with km_col2:
+    st.subheader("➡️ Get Next Unused Key")
+    if st.button("Fetch Next Key"):
+        next_key = get_next_unused_key()
+        if next_key == "No Keys Left!":
+            st.error(next_key)
+        else:
+            st.success(next_key)
 
