@@ -13,7 +13,9 @@ from logger import Logger
 # Set TEST_MODE to True for testing (loads dummy data)
 load_dotenv()
 TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
+file = "test_guilds.json" if TEST_MODE else "guilds.json"
 logger = Logger()
+logger.log_message(f"TEST_MODE={TEST_MODE} using file {file}", "DEBUG")
 
 # Define times for the loop (use 12:00 UTC daily for production)
 times = [time(hour=2, minute=15, second=0)]
@@ -97,10 +99,8 @@ class PostListings(commands.Cog):
             embeds.append(embed)
 
         # Adding logic for exclusively running the bot in test mode
-        if TEST_MODE:
-            existing_guilds = util.getDataFromJSON("test_guilds.json")
-        else:
-            existing_guilds = util.getDataFromJSON("guilds.json")
+
+        existing_guilds = util.getDataFromJSON(file)
 
 
         logger.log_message("Posting in the following guilds...", "CHANNEL")
