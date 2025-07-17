@@ -27,7 +27,7 @@ class PostListings(commands.Cog):
     # ──────────────────────────────────────────────────────────────────────────
     def __init__(self, bot):
         self.bot = bot
-        logger.log_message("Initializing PostListings cog - Bot Restarted!", "INFO")
+        logger.log_message("Initializing PostListings cog - Bot Restarted! Most likely due to codebase update.", "INFO")
         self.posted_today = False  # Prevent multiple posts in TEST_MODE change this back to false if you would like to test the notifs
         self.post_listings.start()
 
@@ -89,7 +89,7 @@ class PostListings(commands.Cog):
             # Convert to UNIX timestamp
             earliest_date = int(nine_pm_previous_day.timestamp()) if not TEST_MODE else 0
             logger.log_message("UNIX timestamp for earliest_date: " + str(earliest_date), "DATA_PROCESS")
-            listings = util.filterSummer(listings, "2025", earliest_date=earliest_date)
+            listings = self.filter_upcoming_terms(listings, earliest_date=earliest_date)
 
         except Exception as e:
             logger.log_message("Error during filtering/sorting: " + str(e), "ERROR")
@@ -199,6 +199,84 @@ class PostListings(commands.Cog):
             acm_logo = discord.File("acm_logo.png", filename="acm_logo.png")
             await thread.send(embeds=current_batch, files=[acm_logo])
             logger.log_message(f"Sent {len(current_batch)} embeds in the final batch.", "POST_LISTINGS")
+
+ # ──────────────────────────────────────────────────────────────────────────
+    # Smart filter for upcoming terms - excludes current term, includes future ones
+    # ──────────────────────────────────────────────────────────────────────────
+    def filter_upcoming_terms(self, listings, earliest_date=0):
+        """Filter listings for upcoming terms, excluding the current term."""
+        current_month = datetime.now().month
+        current_year = datetime.now().year
+        
+        # Determine current term
+        if 1 <= current_month <= 5:  # January to May = Spring
+            current_term = "Spring"
+        elif 6 <= current_month <= 7:  # June to July = Summer  
+            current_term = "Summer"
+        elif 8 <= current_month <= 12:  # August to December = Fall
+            current_term = "Fall"
+        
+        # Define upcoming terms to look for (proper year rollover)
+        upcoming_terms = []
+        if current_term == "Spring":
+            upcoming_terms = [
+                f"Summer {current_year}",
+                f"Fall {current_year}", 
+                f"Winter {current_year}",  # Winter of current year (Winter 2025 = Winter 2025-2026)
+                f"Spring {current_year + 1}"
+            ]
+        elif current_term == "Summer":
+            upcoming_terms = [
+                f"Fall {current_year}",
+                f"Winter {current_year}",  # Winter of current year (Winter 2025 = Winter 2025-2026)
+                f"Spring {current_year + 1}",  # Spring is next year
+                f"Summer {current_year + 1}"
+            ]
+        elif current_term == "Fall":
+            upcoming_terms = [
+                f"Winter {current_year}",  # Winter of current year (Winter 2025 = Winter 2025-2026)
+                f"Spring {current_year + 1}",
+                f"Summer {current_year + 1}",
+                f"Fall {current_year + 1}"
+            ]
+        
+        logger.log_message(f"Current term: {current_term} {current_year}", "DATA_PROCESS")
+        logger.log_message(f"Looking for upcoming terms: {upcoming_terms}", "DATA_PROCESS")
+        
+        filtered = []
+        for listing in listings:
+            try:
+                # Check date filter
+                if int(listing.get("date_posted", 0)) < earliest_date:
+                    continue
+                
+                # Check terms
+                terms = listing.get("terms", [])
+                if not terms or not isinstance(terms, list):
+                    continue
+                
+                # Check if any term matches our upcoming terms
+                has_upcoming_term = False
+                for term in terms:
+                    if term is None:
+                        continue
+                    term_str = str(term).strip()
+                    for upcoming_term in upcoming_terms:
+                        if upcoming_term.lower() in term_str.lower():
+                            has_upcoming_term = True
+                            break
+                    if has_upcoming_term:
+                        break
+                
+                if has_upcoming_term:
+                    filtered.append(listing)
+                    
+            except Exception as e:
+                logger.log_message(f"Error filtering listing: {e}", "ERROR")
+                continue
+        
+        logger.log_message(f"Filtered {len(filtered)} listings from {len(listings)} total", "DATA_PROCESS")
+        return filtered
 
  # ──────────────────────────────────────────────────────────────────────────
     # Builds a Discord Embed object from a single listing dictionary.
