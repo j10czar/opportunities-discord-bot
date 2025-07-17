@@ -7,8 +7,12 @@ st.set_page_config(page_title="ACM Connect Admin Dashboard",
                    page_icon="🛠️",
                    layout="centered")
 
-import os, json, boto3, pandas as pd, secrets
+import os, json, boto3, pandas as pd, secrets, sys
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
+
+# Add app directory to path to import utilities
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'app'))
 
 # ── AWS / S3 helpers ─────────────────────────────────────────────────────
 load_dotenv()
@@ -191,4 +195,242 @@ with km_col2:
             st.error(next_key)
         else:
             st.success(next_key)
+
+# ── listings debugging UI ────────────────────────────────────────────────
+st.divider()
+st.header("🐛 Listings Debug")
+
+def get_daily_listings_debug():
+    """Fetch and filter listings using smart upcoming term detection."""
+    try:
+        # Fetch raw listings directly from S3
+        listings = fetch_json("listings.json")
+        if not listings:
+            return None, "Failed to fetch listings.json from S3"
+        
+        # Calculate yesterday's 9 PM UTC (2 AM UTC) as earliest_date
+        today = datetime.now()
+        previous_day = today - timedelta(days=1)
+        nine_pm_previous_day = datetime(previous_day.year, previous_day.month, previous_day.day, 2, 0, 0)
+        earliest_date = int(nine_pm_previous_day.timestamp())
+        
+        # Smart term detection - determine current term and upcoming terms
+        current_month = datetime.now().month
+        current_year = datetime.now().year
+        
+        if 1 <= current_month <= 5:  # January to May = Spring
+            current_term = "Spring"
+        elif 6 <= current_month <= 7:  # June to July = Summer  
+            current_term = "Summer"
+        elif 8 <= current_month <= 12:  # August to December = Fall
+            current_term = "Fall"
+        
+        # Define upcoming terms to look for (proper year rollover)
+        upcoming_terms = []
+        if current_term == "Spring":
+            upcoming_terms = [f"Summer {current_year}", f"Fall {current_year}", f"Winter {current_year}", f"Spring {current_year + 1}"]
+        elif current_term == "Summer":
+            upcoming_terms = [f"Fall {current_year}", f"Winter {current_year}", f"Spring {current_year + 1}", f"Summer {current_year + 1}"]
+        elif current_term == "Fall":
+            upcoming_terms = [f"Winter {current_year}", f"Spring {current_year + 1}", f"Summer {current_year + 1}", f"Fall {current_year + 1}"]
+        
+        # Filtering with detailed analysis
+        filtered_listings = []
+        filter_stats = {
+            "total": len(listings),
+            "current_term": f"{current_term} {current_year}",
+            "upcoming_terms": upcoming_terms,
+            "has_upcoming_terms": 0,
+            "posted_after_earliest": 0,
+            "both_conditions": 0,
+            "date_too_old": 0,
+            "no_upcoming_terms": 0,
+            "none_type_errors": 0,
+            "other_errors": 0
+        }
+        
+        term_analysis = {}
+        errors = []
+        none_type_errors = []
+        
+        for i, listing in enumerate(listings):
+            try:
+                # Basic validation
+                if listing is None:
+                    none_type_errors.append(f"Listing at index {i} is None")
+                    filter_stats["none_type_errors"] += 1
+                    continue
+                
+                if not isinstance(listing, dict):
+                    errors.append(f"Listing at index {i} is not a dict: {type(listing)}")
+                    filter_stats["other_errors"] += 1
+                    continue
+                
+                # Check date_posted
+                date_posted = listing.get("date_posted")
+                if date_posted is None:
+                    none_type_errors.append(f"Listing {i}: date_posted is None")
+                    filter_stats["none_type_errors"] += 1
+                    continue
+                
+                try:
+                    date_posted = int(date_posted)
+                except (ValueError, TypeError):
+                    errors.append(f"Listing {i}: Invalid date_posted: {date_posted}")
+                    filter_stats["other_errors"] += 1
+                    continue
+                
+                # Count date filtering
+                if date_posted >= earliest_date:
+                    filter_stats["posted_after_earliest"] += 1
+                else:
+                    filter_stats["date_too_old"] += 1
+                
+                # Check terms field
+                terms = listing.get("terms")
+                if terms is None:
+                    none_type_errors.append(f"Listing {i}: terms is None")
+                    filter_stats["none_type_errors"] += 1
+                    continue
+                
+                if not isinstance(terms, list):
+                    errors.append(f"Listing {i}: terms is not a list: {type(terms)}")
+                    filter_stats["other_errors"] += 1
+                    continue
+                
+                # Analyze terms and check for upcoming terms
+                has_upcoming_term = False
+                for term in terms:
+                    if term is None:
+                        none_type_errors.append(f"Listing {i}: term in terms is None")
+                        continue
+                    
+                    term_str = str(term).strip()
+                    if term_str not in term_analysis:
+                        term_analysis[term_str] = 0
+                    term_analysis[term_str] += 1
+                    
+                    # Check if this term matches any upcoming term
+                    for upcoming_term in upcoming_terms:
+                        if upcoming_term.lower() in term_str.lower():
+                            has_upcoming_term = True
+                            break
+                    if has_upcoming_term:
+                        break
+                
+                if has_upcoming_term:
+                    filter_stats["has_upcoming_terms"] += 1
+                    # Apply both filters (date + upcoming terms)
+                    if date_posted >= earliest_date:
+                        filter_stats["both_conditions"] += 1
+                        filtered_listings.append(listing)
+                else:
+                    filter_stats["no_upcoming_terms"] += 1
+                    
+            except Exception as e:
+                errors.append(f"Listing {i}: Unexpected error: {str(e)}")
+                filter_stats["other_errors"] += 1
+        
+        debug_info = {
+            "filter_stats": filter_stats,
+            "term_analysis": dict(sorted(term_analysis.items(), key=lambda x: x[1], reverse=True)),
+            "earliest_date_readable": nine_pm_previous_day.strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "errors": errors,
+            "none_type_errors": none_type_errors,
+            "filtered_listings": len(filtered_listings)
+        }
+        
+        return filtered_listings, debug_info
+        
+    except Exception as e:
+        return None, f"Critical error processing listings: {str(e)}"
+
+if st.button("🔍 Show Today's Listings Debug"):
+    with st.spinner("Fetching and processing listings..."):
+        listings, debug_info = get_daily_listings_debug()
+        
+        if listings is None:
+            st.error(debug_info)
+        else:
+            # Show debug information
+            st.subheader("📊 Smart Term Filtering Debug")
+            
+            # Current term info
+            st.info(f"**Current Term:** {debug_info['filter_stats']['current_term']}")
+            st.info(f"**Looking for upcoming terms:** {', '.join(debug_info['filter_stats']['upcoming_terms'])}")
+            st.info(f"**Date Filter:** Listings posted after {debug_info['earliest_date_readable']}")
+            
+            # Metrics
+            col_debug1, col_debug2, col_debug3, col_debug4 = st.columns(4)
+            
+            with col_debug1:
+                st.metric("Total Listings", debug_info["filter_stats"]["total"])
+            with col_debug2:
+                st.metric("Final Filtered", debug_info["filtered_listings"])
+            with col_debug3:
+                st.metric("Has Upcoming Terms", debug_info["filter_stats"]["has_upcoming_terms"])
+            with col_debug4:
+                st.metric("Recent Enough", debug_info["filter_stats"]["posted_after_earliest"])
+            
+            # Filter breakdown
+            st.subheader("🔍 Filter Breakdown")
+            breakdown_col1, breakdown_col2 = st.columns(2)
+            
+            with breakdown_col1:
+                st.metric("✅ Both Conditions Met", debug_info["filter_stats"]["both_conditions"])
+                st.metric("📅 Date Too Old", debug_info["filter_stats"]["date_too_old"])
+            
+            with breakdown_col2:
+                st.metric("❌ No Upcoming Terms", debug_info["filter_stats"]["no_upcoming_terms"])
+                st.metric("🚨 Data Errors", debug_info["filter_stats"]["none_type_errors"] + debug_info["filter_stats"]["other_errors"])
+            
+            # Show term analysis
+            if debug_info["term_analysis"]:
+                st.subheader("📋 Term Analysis (Top 10)")
+                term_items = list(debug_info["term_analysis"].items())[:10]
+                term_df = pd.DataFrame(term_items, columns=["Term", "Count"])
+                st.dataframe(term_df, use_container_width=True)
+            
+            # Show errors if they exist
+            if debug_info["filter_stats"]["none_type_errors"] > 0:
+                st.error(f"🚨 Found {debug_info['filter_stats']['none_type_errors']} NoneType errors - this is likely causing your bot crashes!")
+                with st.expander("🔍 View NoneType Errors"):
+                    for error in debug_info["none_type_errors"]:
+                        st.text(error)
+            
+            if debug_info["filter_stats"]["other_errors"] > 0:
+                st.warning(f"⚠️ Found {debug_info['filter_stats']['other_errors']} other data issues")
+                with st.expander("🔍 View Other Errors"):
+                    for error in debug_info["errors"]:
+                        st.text(error)
+            
+            # Show listings table
+            if listings:
+                st.subheader(f"📋 Filtered Listings ({len(listings)} items)")
+                
+                # Convert to DataFrame for better display
+                listings_df = []
+                for listing in listings:
+                    listings_df.append({
+                        "Company": listing.get("company_name", "N/A"),
+                        "Title": listing.get("title", "N/A"),
+                        "Locations": ", ".join(listing.get("locations", [])),
+                        "Terms": ", ".join(listing.get("terms", [])),
+                        "Sponsorship": listing.get("sponsorship", "N/A"),
+                        "Posted": datetime.fromtimestamp(listing.get("date_posted", 0)).strftime("%m/%d/%Y %H:%M"),
+                        "Updated": datetime.fromtimestamp(listing.get("date_updated", 0)).strftime("%m/%d/%Y %H:%M"),
+                        "Active": listing.get("active", False),
+                        "URL": listing.get("url", "N/A")
+                    })
+                
+                df = pd.DataFrame(listings_df)
+                st.dataframe(df, use_container_width=True)
+                
+                # Show raw JSON for filtered listings (what the bot actually processes)
+                with st.expander(f"🔧 Raw JSON - Filtered Listings (Bot Input) - Showing {min(len(listings), 5)} of {len(listings)}"):
+                    st.info("This is the exact JSON data that your bot receives after smart term filtering")
+                    st.json(listings[:5])  # Show first 5 filtered listings instead of 3
+            else:
+                st.warning("No listings match the current filter criteria.")
 
