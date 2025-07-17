@@ -94,7 +94,7 @@ class PostListings(commands.Cog):
             # Create a datetime object for 9 PM (21:00) on the previous day set to 2 bc of EC2 being on UTC time
             nine_pm_previous_day = datetime(previous_day.year, previous_day.month, previous_day.day, 2, 0, 0)
             # Convert to UNIX timestamp
-            earliest_date = int(nine_pm_previous_day.timestamp()) if not TEST_MODE else 0
+            earliest_date = int(nine_pm_previous_day.timestamp())
             logger.log_message("UNIX timestamp for earliest_date: " + str(earliest_date), "DATA_PROCESS")
             listings = self.filter_upcoming_terms(listings, earliest_date=earliest_date)
 
@@ -106,6 +106,9 @@ class PostListings(commands.Cog):
             return
 
         logger.log_message(f"{len(listings)} listings to post", "SUCCESS")
+        
+        # Note: Logo fetching happens during embed creation for better reliability
+        
         # Prepare embeds
         embeds = []
         for listing in listings:
@@ -147,8 +150,8 @@ class PostListings(commands.Cog):
             thread_title = self.generate_thread_title(today)
 
             try:
-                # In STAGE mode, don't include role mentions (no notifications)
-                if STAGE:
+                # In STAGE mode or TEST_MODE, don't include role mentions (no notifications)
+                if STAGE or TEST_MODE:
                     content = f"New internships posted for {thread_title}:"
                 else:
                     content = f"{role_mention} New internships posted for {thread_title}:"
@@ -341,6 +344,63 @@ class PostListings(commands.Cog):
             icon_url=f"attachment://{acm_logo_path}"
         )
         return embed
+
+ # ──────────────────────────────────────────────────────────────────────────
+    # Pre-fetches missing company logos for efficiency (only fetch each company once)
+    # ──────────────────────────────────────────────────────────────────────────
+    async def prefetch_missing_logos(self, listings):
+        """Pre-fetch missing company logos to avoid redundant requests."""
+        # Get current cached companies
+        companies = util.getDataFromJSON("companies.json")
+        if companies is None:
+            companies = []
+        
+        # Create a set of already cached company names for fast lookup
+        cached_companies = {company.get('name') for company in companies if company.get('name')}
+        
+        # Find unique companies that need logos
+        companies_to_fetch = set()
+        for listing in listings:
+            company_name = listing.get('company_name')
+            company_url = listing.get('company_url')
+            
+            if (company_name and company_url and 
+                company_name not in cached_companies and
+                company_url.startswith('https://simplify.jobs/c/')):
+                companies_to_fetch.add((company_name, company_url))
+        
+        if not companies_to_fetch:
+            logger.log_message("All company logos already cached, skipping logo fetch.", "LOGO")
+            return
+        
+        logger.log_message(f"Pre-fetching logos for {len(companies_to_fetch)} companies...", "LOGO")
+        
+        # Fetch missing logos
+        for company_name, company_url in companies_to_fetch:
+            try:
+                logger.log_message(f"Fetching logo for {company_name}...", "LOGO")
+                response = requests.get(company_url, timeout=10)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                img = soup.find(name='img', attrs={'alt': company_name})
+                
+                if img and 'src' in img.attrs:
+                    company_logo = img['src']
+                    company = {
+                        'name': company_name,
+                        'logo_url': company_logo
+                    }
+                    companies.append(company)
+                    logger.log_message(f"Logo found and saved for {company_name}", "LOGO")
+                else:
+                    logger.log_message(f"No logo found for {company_name}", "LOGO")
+                    
+            except Exception as e:
+                logger.log_message(f"Error fetching logo for {company_name}: {e}", "ERROR")
+        
+        # Save all new logos to S3 at once
+        if companies_to_fetch:
+            util.saveDataToJSON("companies.json", companies)
+            logger.log_message(f"Saved logos for {len(companies_to_fetch)} companies to S3.", "LOGO")
 
 # ──────────────────────────────────────────────────────────────────────────
     # Retrieves (and caches) the company logo URL; scrapes Simplify if needed.
