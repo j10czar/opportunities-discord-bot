@@ -10,12 +10,29 @@ import aiohttp
 import asyncio
 from logger import Logger
 
-# Set TEST_MODE to True for testing (loads dummy data)
+# Load environment variables
 load_dotenv()
 TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
-file = "test_guilds.json" if TEST_MODE else "guilds.json"
+STAGE = os.getenv("STAGE", "false").lower() == "true"
+
+# Make TEST_MODE and STAGE mutually exclusive - TEST_MODE wins if both are true
+if TEST_MODE and STAGE:
+    STAGE = False
+
+# Initialize logger
 logger = Logger()
-logger.log_message(f"TEST_MODE={TEST_MODE} using file {file}", "DEBUG")
+
+# Log the mutual exclusivity warning if needed
+if TEST_MODE and os.getenv("STAGE", "false").lower() == "true":
+    logger.log_message("Both TEST_MODE and STAGE are true. TEST_MODE takes precedence, disabling STAGE.", "WARNING")
+
+# Determine which guild file to use
+if TEST_MODE or STAGE:
+    file = "test_guilds.json"  # Both test and stage modes use test guilds
+else:
+    file = "guilds.json"  # Production uses production guilds
+
+logger.log_message(f"TEST_MODE={TEST_MODE}, STAGE={STAGE}, using file {file}", "DEBUG")
 
 # Define times for the loop (use 12:00 UTC daily for production)
 times = [time(hour=2, minute=15, second=0)]
@@ -54,25 +71,15 @@ class PostListings(commands.Cog):
             return
 
         logger.log_message("____Running post_listings loop____", "POST_LISTINGS")
-        logger.log_message("Test Mode is " + str(TEST_MODE), "POST_LISTINGS")
+        logger.log_message(f"TEST_MODE={TEST_MODE}, STAGE={STAGE}", "POST_LISTINGS")
 
         try:
-            # Load data depending on test mode
-            if TEST_MODE:
-                logger.log_message("Fetching TEST listings from S3.", "DATA_LOAD")
-                listings = util.getDataFromJSON("test_listings.json")
-                if listings is None:
-                    logger.log_message("Failed to fetch test listings from S3", "ERROR")
-                    return
-                for listing in listings:
-                    listing["date_posted"] = datetime.now().timestamp()
-                    listing["date_updated"] = datetime.now().timestamp()
-            else:
-                logger.log_message("Fetching listings from S3.", "DATA_LOAD")
-                listings = util.getDataFromJSON("listings.json")
-                if listings is None:
-                    logger.log_message("Failed to fetch listings from S3", "ERROR")
-                    return
+            # Always load actual listings (no more dummy data in TEST_MODE)
+            logger.log_message("Fetching listings from S3.", "DATA_LOAD")
+            listings = util.getDataFromJSON("listings.json")
+            if listings is None:
+                logger.log_message("Failed to fetch listings from S3", "ERROR")
+                return
         except Exception as e:
             logger.log_message(f"Error loading data: {e}", "ERROR")
             return
@@ -140,9 +147,15 @@ class PostListings(commands.Cog):
             thread_title = self.generate_thread_title(today)
 
             try:
+                # In STAGE mode, don't include role mentions (no notifications)
+                if STAGE:
+                    content = f"New internships posted for {thread_title}:"
+                else:
+                    content = f"{role_mention} New internships posted for {thread_title}:"
+                
                 thread_with_message = await forum_channel.create_thread(
                     name=thread_title,
-                    content=f"{role_mention} New internships posted for {thread_title}:"
+                    content=content
                 )
                 thread = thread_with_message.thread  # Extract the thread object
 
@@ -162,7 +175,8 @@ class PostListings(commands.Cog):
 
             logger.log_message(f"Job listings posted successfully to guild: {guildName} with id: {guild['id']}.", "SUCCESS")
 
-            if TEST_MODE:
+            # Only set posted_today flag in TEST_MODE, not in STAGE mode
+            if TEST_MODE and not STAGE:
                 self.posted_today = True
 
  # ──────────────────────────────────────────────────────────────────────────

@@ -13,8 +13,11 @@ intents.messages = True  # Ensure this is enabled
 bot = commands.Bot(command_prefix="", intents=intents)
 
 TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
+STAGE = os.getenv("STAGE", "false").lower() == "true"
 
-token = os.getenv("TEST_BOT_TOKEN") if TEST_MODE else os.getenv("BOT_TOKEN")
+# Use test bot token for both TEST_MODE and STAGE mode
+# since both use test guilds where production bot may not have access
+token = os.getenv("TEST_BOT_TOKEN") if (TEST_MODE or STAGE) else os.getenv("BOT_TOKEN")
 
 @bot.event
 async def on_ready():
