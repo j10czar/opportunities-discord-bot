@@ -6,3 +6,4 @@ packages.zip
 .env
 __pycache__/
 *.json
+.kiro/

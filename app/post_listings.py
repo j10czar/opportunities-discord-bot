@@ -61,14 +61,21 @@ class PostListings(commands.Cog):
             if TEST_MODE:
                 logger.log_message("Fetching TEST listings from S3.", "DATA_LOAD")
                 listings = util.getDataFromJSON("test_listings.json")
+                if listings is None:
+                    logger.log_message("Failed to fetch test listings from S3", "ERROR")
+                    return
                 for listing in listings:
                     listing["date_posted"] = datetime.now().timestamp()
                     listing["date_updated"] = datetime.now().timestamp()
             else:
                 logger.log_message("Fetching listings from S3.", "DATA_LOAD")
                 listings = util.getDataFromJSON("listings.json")
+                if listings is None:
+                    logger.log_message("Failed to fetch listings from S3", "ERROR")
+                    return
         except Exception as e:
             logger.log_message(f"Error loading data: {e}", "ERROR")
+            return
         logger.log_message(f"Number of listings succesfully fetched from S3: {len(listings)}", "SUCCESS")
 
         try:
@@ -96,18 +103,22 @@ class PostListings(commands.Cog):
         embeds = []
         for listing in listings:
             embed = self.create_embed(listing)
-            embeds.append(embed)
+            if embed is not None:
+                embeds.append(embed)
+            else:
+                logger.log_message("Skipped invalid listing when creating embed", "WARNING")
 
         # Adding logic for exclusively running the bot in test mode
 
         existing_guilds = util.getDataFromJSON(file)
-
+        if existing_guilds is None:
+            logger.log_message(f"Failed to fetch guild data from {file}", "ERROR")
+            return
 
         logger.log_message("Posting in the following guilds...", "CHANNEL")
         for guild_data in existing_guilds:
             guild_info = util.get_guild_info(guild_data, self.bot)
             logger.log_message(guild_info, "CHANNEL")
-
 
         for guild in existing_guilds:
 
@@ -194,31 +205,47 @@ class PostListings(commands.Cog):
     # ──────────────────────────────────────────────────────────────────────────
     def create_embed(self, listing):
         """Create a Discord Embed object for a job listing."""
+        # Defensive checks for required fields
+        if not listing or not isinstance(listing, dict):
+            logger.log_message("Invalid listing object passed to create_embed", "ERROR")
+            return None
+            
         # Purple embed color
         embed = discord.Embed(
-            title=listing["title"],
-            url=listing["url"],
-            description=f"Posted by **{listing['company_name']}**",
+            title=listing.get("title", "No Title"),
+            url=listing.get("url", ""),
+            description=f"Posted by **{listing.get('company_name', 'Unknown Company')}**",
             color=0x5865f2,
-            timestamp=datetime.fromtimestamp(listing["date_updated"])
+            timestamp=datetime.fromtimestamp(listing.get("date_updated", datetime.now().timestamp()))
         )
         # Add fields for job details
-        embed.add_field(name="Locations", value=", ".join(listing["locations"]), inline=False)
-        embed.add_field(name="Terms", value=", ".join(listing["terms"]), inline=False)
-        embed.add_field(name="Sponsorship", value=listing["sponsorship"], inline=True)
+        locations = listing.get("locations", [])
+        if locations and isinstance(locations, list):
+            embed.add_field(name="Locations", value=", ".join(locations), inline=False)
+        else:
+            embed.add_field(name="Locations", value="Not specified", inline=False)
+            
+        terms = listing.get("terms", [])
+        if terms and isinstance(terms, list):
+            embed.add_field(name="Terms", value=", ".join(terms), inline=False)
+        else:
+            embed.add_field(name="Terms", value="Not specified", inline=False)
+            
+        embed.add_field(name="Sponsorship", value=listing.get("sponsorship", "Not specified"), inline=True)
 
         # Set author with company name and URL
-        if listing["company_url"]:
-            embed.set_author(name=listing["company_name"], url=listing["company_url"])
+        if listing.get("company_url"):
+            embed.set_author(name=listing.get("company_name", "Unknown Company"), url=listing.get("company_url"))
 
             # Set thumbnail with company logo
             company_logo = self.get_company_logo(listing)
-            embed.set_thumbnail(url=company_logo)
+            if company_logo:
+                embed.set_thumbnail(url=company_logo)
 
         # Set footer with logo and last updated timestamp
         acm_logo_path = "acm_logo.png"
         embed.set_footer(
-            text=f"Last updated • {datetime.fromtimestamp(listing['date_updated']).strftime('%m/%d/%Y %I:%M %p')}",
+            text=f"Last updated • {datetime.fromtimestamp(listing.get('date_updated', datetime.now().timestamp())).strftime('%m/%d/%Y %I:%M %p')}",
             icon_url=f"attachment://{acm_logo_path}"
         )
         return embed
@@ -228,29 +255,52 @@ class PostListings(commands.Cog):
     # ──────────────────────────────────────────────────────────────────────────
     def get_company_logo(self, listing):
         """Gets the company logo for a listing"""
+        # Defensive checks
+        if not listing or not isinstance(listing, dict):
+            return None
+            
+        company_name = listing.get('company_name')
+        company_url = listing.get('company_url')
+        
+        if not company_name or not company_url:
+            return None
+        
         # Check if company logo is already saved
         companies = util.getDataFromJSON("companies.json")
+        if companies is None:
+            companies = []
+        
         for company in companies:
-            if company['name'] == listing['company_name']:
-                return company['logo_url']
+            if company.get('name') == company_name:
+                return company.get('logo_url')
 
         # Create request to Simplify company page, and scrape company logo
-        if not listing['company_url'].startswith('https://simplify.jobs/c/'):
+        if not company_url.startswith('https://simplify.jobs/c/'):
             return None
 
-        logger.log_message(f"Fetching logo for {listing['company_name']}...", "LOGO")
-        soup = BeautifulSoup(requests.get(listing["company_url"]).text, 'html.parser')
-        img = soup.find(name='img', attrs={'alt': listing['company_name']})
-        company_logo = img['src']
-        company = {
-            'name': listing['company_name'],
-            'logo_url': company_logo
-        }
-        companies.append(company)
-        util.saveDataToJSON("companies.json", companies)
-        logger.log_message(f"Logo found and saved for {listing['company_name']}", "LOGO")
+        try:
+            logger.log_message(f"Fetching logo for {company_name}...", "LOGO")
+            response = requests.get(company_url, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            img = soup.find(name='img', attrs={'alt': company_name})
+            
+            if not img or 'src' not in img.attrs:
+                logger.log_message(f"No logo found for {company_name}", "LOGO")
+                return None
+                
+            company_logo = img['src']
+            company = {
+                'name': company_name,
+                'logo_url': company_logo
+            }
+            companies.append(company)
+            util.saveDataToJSON("companies.json", companies)
+            logger.log_message(f"Logo found and saved for {company_name}", "LOGO")
 
-        return company_logo
+            return company_logo
+        except Exception as e:
+            logger.log_message(f"Error fetching logo for {company_name}: {e}", "ERROR")
+            return None
 
   # ──────────────────────────────────────────────────────────────────────────
     # Generates the thread title like “SPRING 25: April 26”, based on today’s
