@@ -122,14 +122,47 @@ def sortListings(listings):
 
     return listings
 
-def filterSummer(listings, year, earliest_date=0):
-    """Return listings posted after earliest_date whose terms mention <year>."""
+def filterByTime(listings, year=None, earliest_date=0):
+    """
+    Filter listings to only include those posted within the specified time period.
+    
+    This function performs date-only filtering based on the earliest_date parameter.
+    It uses a simple 24-hour lookback approach to include all recent listings.
+    
+    Term-based filtering has been completely removed for simplicity and to ensure
+    that all relevant internship opportunities are included regardless of their
+    term content. Previously, listings were filtered by terms containing a specific
+    year, but this approach was too restrictive and caused valid listings to be
+    excluded.
+    
+    Args:
+        listings: List of listing dictionaries to filter
+        year: Unused parameter kept for backward compatibility (ignored)
+        earliest_date: Unix timestamp - only listings posted after this time are included
+    
+    Returns:
+        List of listings with date_posted >= earliest_date
+    """
     filtered = []
     for listing in listings:
-        if int(listing["date_posted"]) >= earliest_date:
-            if any(year in term for term in listing["terms"]):
+        try:
+            # Only filter by date - no term checking
+            if int(listing["date_posted"]) >= earliest_date:
                 filtered.append(listing)
+        except (ValueError, TypeError, KeyError):
+            # Skip listings with invalid date_posted values
+            continue
     return filtered
+
+
+def filterSummer(listings, year, earliest_date=0):
+    """
+    Deprecated: Use filterByTime instead. 
+    
+    This function is kept for backward compatibility during transition.
+    It now delegates to filterByTime and ignores term-based filtering.
+    """
+    return filterByTime(listings, year, earliest_date)
 
 # ──────────────────────────────────────────────────────────────────────────
 # Discord helper: make guild/role/channel names human-readable for logs

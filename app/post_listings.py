@@ -81,15 +81,11 @@ class PostListings(commands.Cog):
         try:
             logger.log_message("Sorting listings...", "DATA_PROCESS")
             util.sortListings(listings)
-            today = datetime.now()
-            # Subtract one day to get the previous day
-            previous_day = today - timedelta(days=1)
-            # Create a datetime object for 9 PM (21:00) on the previous day set to 2 bc of EC2 being on UTC time
-            nine_pm_previous_day = datetime(previous_day.year, previous_day.month, previous_day.day, 2, 0, 0)
-            # Convert to UNIX timestamp
-            earliest_date = int(nine_pm_previous_day.timestamp()) if not TEST_MODE else 0
+            # Simple 24-hour lookback for filtering recent listings
+            twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
+            earliest_date = int(twenty_four_hours_ago.timestamp()) if not TEST_MODE else 0
             logger.log_message("UNIX timestamp for earliest_date: " + str(earliest_date), "DATA_PROCESS")
-            listings = util.filterSummer(listings, "2025", earliest_date=earliest_date)
+            listings = util.filterByTime(listings, "2025", earliest_date=earliest_date)
 
         except Exception as e:
             logger.log_message("Error during filtering/sorting: " + str(e), "ERROR")

@@ -7,8 +7,12 @@ st.set_page_config(page_title="ACM Connect Admin Dashboard",
                    page_icon="🛠️",
                    layout="centered")
 
-import os, json, boto3, pandas as pd, secrets
+import os, json, boto3, pandas as pd, secrets, sys
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
+
+# Add app directory to path to import utilities
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'app'))
 
 # ── AWS / S3 helpers ─────────────────────────────────────────────────────
 load_dotenv()
@@ -192,3 +196,162 @@ with km_col2:
         else:
             st.success(next_key)
 
+# ── listings debugging UI ────────────────────────────────────────────────
+st.divider()
+st.header("🐛 Listings Debug")
+
+def get_daily_listings_debug():
+    """Fetch and filter listings by date only - no term filtering."""
+    try:
+        # Fetch raw listings directly from S3
+        listings = fetch_json("listings.json")
+        if not listings:
+            return None, "Failed to fetch listings.json from S3"
+        
+        # Simple 24-hour lookback to match post_listings logic
+        twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
+        earliest_date = int(twenty_four_hours_ago.timestamp())
+        
+        # Simple date-only filtering
+        filtered_listings = []
+        filter_stats = {
+            "total": len(listings),
+            "posted_after_cutoff": 0,
+            "date_too_old": 0,
+            "none_type_errors": 0,
+            "other_errors": 0
+        }
+        
+        errors = []
+        none_type_errors = []
+        
+        for i, listing in enumerate(listings):
+            try:
+                # Basic validation
+                if listing is None:
+                    none_type_errors.append(f"Listing at index {i} is None")
+                    filter_stats["none_type_errors"] += 1
+                    continue
+                
+                if not isinstance(listing, dict):
+                    errors.append(f"Listing at index {i} is not a dict: {type(listing)}")
+                    filter_stats["other_errors"] += 1
+                    continue
+                
+                # Check date_posted
+                date_posted = listing.get("date_posted")
+                if date_posted is None:
+                    none_type_errors.append(f"Listing {i}: date_posted is None")
+                    filter_stats["none_type_errors"] += 1
+                    continue
+                
+                try:
+                    date_posted = int(date_posted)
+                except (ValueError, TypeError):
+                    errors.append(f"Listing {i}: Invalid date_posted: {date_posted}")
+                    filter_stats["other_errors"] += 1
+                    continue
+                
+                # Simple date filtering only
+                if date_posted >= earliest_date:
+                    filter_stats["posted_after_cutoff"] += 1
+                    filtered_listings.append(listing)
+                else:
+                    filter_stats["date_too_old"] += 1
+                    
+            except Exception as e:
+                errors.append(f"Listing {i}: Unexpected error: {str(e)}")
+                filter_stats["other_errors"] += 1
+        
+        debug_info = {
+            "filter_stats": filter_stats,
+            "cutoff_date_readable": twenty_four_hours_ago.strftime("%Y-%m-%d %H:%M:%S"),
+            "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "cutoff_logic": "Simple 24-hour lookback filtering",
+            "errors": errors,
+            "none_type_errors": none_type_errors,
+            "filtered_listings": len(filtered_listings)
+        }
+        
+        return filtered_listings, debug_info
+        
+    except Exception as e:
+        return None, f"Critical error processing listings: {str(e)}"
+
+if st.button("🔍 Show Today's Listings Debug"):
+    with st.spinner("Fetching and processing listings..."):
+        listings, debug_info = get_daily_listings_debug()
+        
+        if listings is None:
+            st.error(debug_info)
+        else:
+            # Show debug information
+            st.subheader("📊 Date-Only Filtering Debug")
+            
+            # Current filtering info
+            st.info(f"**Cutoff Logic:** {debug_info['cutoff_logic']}")
+            st.info(f"**Date Filter:** Listings posted after {debug_info['cutoff_date_readable']}")
+            st.info(f"**Current Time:** {debug_info['current_time']}")
+            
+            # Metrics
+            col_debug1, col_debug2, col_debug3, col_debug4 = st.columns(4)
+            
+            with col_debug1:
+                st.metric("Total Listings", debug_info["filter_stats"]["total"])
+            with col_debug2:
+                st.metric("Final Filtered", debug_info["filtered_listings"])
+            with col_debug3:
+                st.metric("Posted After Cutoff", debug_info["filter_stats"]["posted_after_cutoff"])
+            with col_debug4:
+                st.metric("Date Too Old", debug_info["filter_stats"]["date_too_old"])
+            
+            # Error metrics
+            if debug_info["filter_stats"]["none_type_errors"] > 0 or debug_info["filter_stats"]["other_errors"] > 0:
+                st.subheader("🚨 Data Issues")
+                error_col1, error_col2 = st.columns(2)
+                
+                with error_col1:
+                    st.metric("NoneType Errors", debug_info["filter_stats"]["none_type_errors"])
+                with error_col2:
+                    st.metric("Other Errors", debug_info["filter_stats"]["other_errors"])
+            
+            # Show errors if they exist
+            if debug_info["filter_stats"]["none_type_errors"] > 0:
+                st.error(f"🚨 Found {debug_info['filter_stats']['none_type_errors']} NoneType errors - this is likely causing your bot crashes!")
+                with st.expander("🔍 View NoneType Errors"):
+                    for error in debug_info["none_type_errors"]:
+                        st.text(error)
+            
+            if debug_info["filter_stats"]["other_errors"] > 0:
+                st.warning(f"⚠️ Found {debug_info['filter_stats']['other_errors']} other data issues")
+                with st.expander("🔍 View Other Errors"):
+                    for error in debug_info["errors"]:
+                        st.text(error)
+            
+            # Show listings table
+            if listings:
+                st.subheader(f"📋 Filtered Listings ({len(listings)} items)")
+                
+                # Convert to DataFrame for better display
+                listings_df = []
+                for listing in listings:
+                    listings_df.append({
+                        "Company": listing.get("company_name", "N/A"),
+                        "Title": listing.get("title", "N/A"),
+                        "Locations": ", ".join(listing.get("locations", [])),
+                        "Sponsorship": listing.get("sponsorship", "N/A"),
+                        "Posted": datetime.fromtimestamp(listing.get("date_posted", 0)).strftime("%m/%d/%Y %H:%M"),
+                        "Updated": datetime.fromtimestamp(listing.get("date_updated", 0)).strftime("%m/%d/%Y %H:%M"),
+                        "Active": listing.get("active", False),
+                        "URL": listing.get("url", "N/A")
+                    })
+                
+                df = pd.DataFrame(listings_df)
+                st.dataframe(df, use_container_width=True)
+                
+                # Show raw JSON for filtered listings (what the bot actually processes)
+                with st.expander(f"🔧 Raw JSON - Filtered Listings (Bot Input) - Showing {min(len(listings), 5)} of {len(listings)}"):
+                    st.info("This is the exact JSON data that your bot receives after date-only filtering")
+                    st.json(listings[:5])  # Show first 5 filtered listings instead of 3
+            else:
+                st.warning("No listings match the current filter criteria.")
