@@ -13,7 +13,11 @@ from logger import Logger
 # Set TEST_MODE to True for testing (loads dummy data)
 load_dotenv()
 TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
-file = "test_guilds.json" if TEST_MODE else "guilds.json"
+STAGE = os.getenv("STAGE", "true").lower() == "true"
+if TEST_MODE or STAGE:
+    file = "test_guilds.json"
+else:
+    file = "guilds.json"
 logger = Logger()
 logger.log_message(f"TEST_MODE={TEST_MODE} using file {file}", "DEBUG")
 

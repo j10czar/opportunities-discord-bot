@@ -13,8 +13,11 @@ intents.messages = True  # Ensure this is enabled
 bot = commands.Bot(command_prefix="", intents=intents)
 
 TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
-
-token = os.getenv("TEST_BOT_TOKEN") if TEST_MODE else os.getenv("BOT_TOKEN")
+STAGE = os.getenv("STAGE", "true").lower() == "true"
+if TEST_MODE or STAGE:
+    token = os.getenv("TEST_BOT_TOKEN")
+else:
+    token = os.getenv("BOT_TOKEN")
 
 @bot.event
 async def on_ready():

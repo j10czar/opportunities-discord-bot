@@ -15,8 +15,10 @@ class Logger:
     # • TEST_MODE false → route webhooks to LOG_WEBHOOK_URL
     # ──────────────────────────────────────────────────────────────────────
     def __init__(self):
+        TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
+        STAGE = os.getenv("STAGE", "true").lower() == "true"
         self.file = open("logging.txt", "a")
-        self.test_mode = os.getenv("TEST_MODE", "true").lower() == "true"
+        self.test_mode = TEST_MODE or STAGE
 
     # ──────────────────────────────────────────────────────────────────────
     # Core public API
