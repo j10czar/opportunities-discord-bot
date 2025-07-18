@@ -31,7 +31,11 @@ class PostListings(commands.Cog):
     # ──────────────────────────────────────────────────────────────────────────
     def __init__(self, bot):
         self.bot = bot
-        logger.log_message("Initializing PostListings cog - Bot Restarted!", "INFO")
+        logger.log_message(f"Bot Restarted and Update Synced.", "INFO")
+        if TEST_MODE:
+            logger.log_message("TEST_MODE is enabled. Running post_listings every 15 seconds.", "INFO")
+        if STAGE:
+            logger.log_message("STAGE is enabled. Will act as production on testing bot and guilds.", "INFO")
         self.posted_today = False  # Prevent multiple posts in TEST_MODE change this back to false if you would like to test the notifs
         self.post_listings.start()
 
