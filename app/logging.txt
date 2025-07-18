@@ -1,0 +1,7 @@
+[07/17|19:44:09] | WARNING | Both TEST_MODE and STAGE are true. TEST_MODE takes precedence, disabling STAGE.
+[07/17|20:27:28] | INFO | Initializing PostListings cog - Bot Restarted! Most likely due to codebase update.
+[07/17|20:27:28] | INFO | Initializing PostListings cog - Bot Restarted! Most likely due to codebase update.
+[07/17|20:27:28] | INFO | Initializing PostListings cog - Bot Restarted! Most likely due to codebase update.
+[07/17|20:27:28] | INFO | Initializing PostListings cog - Bot Restarted! Most likely due to codebase update.
+[07/17|20:27:28] | INFO | Initializing PostListings cog - Bot Restarted! Most likely due to codebase update.
+[07/17|20:27:28] | INFO | Initializing PostListings cog - Bot Restarted! Most likely due to codebase update.
