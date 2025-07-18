@@ -44,7 +44,7 @@ class PostListings(commands.Cog):
     # listings, filters/sorts them, and posts to the configured Discord forums.
     # A heartbeat entry is logged every execution.
     # ──────────────────────────────────────────────────────────────────────────
-    @tasks.loop(time=times) if not TEST_MODE else tasks.loop(seconds=5)
+    @tasks.loop(time=times) if not TEST_MODE else tasks.loop(seconds=15)
     async def post_listings(self):
 
 
@@ -58,21 +58,11 @@ class PostListings(commands.Cog):
 
         try:
             # Load data depending on test mode
-            if TEST_MODE:
-                logger.log_message("Fetching TEST listings from S3.", "DATA_LOAD")
-                listings = util.getDataFromJSON("test_listings.json")
-                if listings is None:
-                    logger.log_message("Failed to fetch test listings from S3", "ERROR")
-                    return
-                for listing in listings:
-                    listing["date_posted"] = datetime.now().timestamp()
-                    listing["date_updated"] = datetime.now().timestamp()
-            else:
-                logger.log_message("Fetching listings from S3.", "DATA_LOAD")
-                listings = util.getDataFromJSON("listings.json")
-                if listings is None:
-                    logger.log_message("Failed to fetch listings from S3", "ERROR")
-                    return
+            logger.log_message("Fetching listings from S3.", "DATA_LOAD")
+            listings = util.getDataFromJSON("listings.json")
+            if listings is None:
+                logger.log_message("Failed to fetch listings from S3", "ERROR")
+                return
         except Exception as e:
             logger.log_message(f"Error loading data: {e}", "ERROR")
             return
@@ -83,7 +73,7 @@ class PostListings(commands.Cog):
             util.sortListings(listings)
             # Simple 24-hour lookback for filtering recent listings
             twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
-            earliest_date = int(twenty_four_hours_ago.timestamp()) if not TEST_MODE else 0
+            earliest_date = int(twenty_four_hours_ago.timestamp())
             logger.log_message("UNIX timestamp for earliest_date: " + str(earliest_date), "DATA_PROCESS")
             listings = util.filterByTime(listings, "2025", earliest_date=earliest_date)
 
@@ -132,7 +122,8 @@ class PostListings(commands.Cog):
                 logger.log_message(f"Channel in guild {guild_info['guild']} with channel ID {guild['channel']} not found or inaccessible.", "WARNING")
                 return
 
-            # Determine the thread title based on the season
+            # Determine the thread title based on the date
+            today = datetime.now()
             thread_title = self.generate_thread_title(today)
 
             try:
@@ -303,20 +294,9 @@ class PostListings(commands.Cog):
     # date and a simple season heuristic.
     # ──────────────────────────────────────────────────────────────────────────
     def generate_thread_title(self, today):
-        """Generate a thread title based on the season and date."""
-
-        def get_season(month):
-            if 8 <= month <= 12:  # August to December
-                return "FALL"
-            elif 1 <= month <= 5:  # January to May
-                return "SPRING"
-            elif 6 <= month <= 7:  # June to July
-                return "SUMMER"
-            return "UNKNOWN"
-
-        season = get_season(today.month)
+        """Generate a thread title based on the date."""
         adjusted_date = today - timedelta(days=1)
-        return f"{season} {adjusted_date.year % 100}: {adjusted_date.strftime('%B %d')}"
+        return adjusted_date.strftime('%B %d, %Y')
 
  # ──────────────────────────────────────────────────────────────────────────
     # Waits until the bot is connected before starting the loop; logs readiness.
