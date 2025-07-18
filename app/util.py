@@ -12,6 +12,8 @@ load_dotenv()
 
 import boto3
 import json
+import time
+import random
 
 # ──────────────────────────────────────────────────────────────────────────
 # AWS credentials + client
@@ -38,17 +40,53 @@ def getDataFromJSON(filename):
         data = response["Body"].read().decode("utf-8")
         return json.loads(data)
     except Exception as e:
-        print(f"Error retrieving {filename} from S3: {e}")
-        return None
+        # Handle specific S3 errors
+        error_str = str(e).lower()
+        if 'nosuchkey' in error_str or 'key' in error_str and 'not found' in error_str:
+            print(f"File {filename} not found in S3 bucket {bucket_name}")
+            return None
+        elif 'nosuchbucket' in error_str or 'bucket' in error_str and 'not found' in error_str:
+            print(f"S3 bucket {bucket_name} not found")
+            return None
+        elif 'json' in error_str.lower() or 'decode' in error_str.lower():
+            print(f"Error parsing JSON from {filename}: {e}")
+            return None
+        else:
+            print(f"Error retrieving {filename} from S3: {e}")
+            return None
 
 
-def saveDataToJSON(filename, data, pretty=False):
-    """Upload Python object to S3 as JSON (optionally pretty-printed)."""
-    s3.put_object(
-        Body=json.dumps(data, indent=(4 if pretty else 0)),
-        Bucket=bucket_name,
-        Key=filename,
-    )
+def saveDataToJSON(filename, data, pretty=False, max_retries=3):
+    """Upload Python object to S3 as JSON (optionally pretty-printed) with retry logic."""
+    for attempt in range(max_retries):
+        try:
+            json_data = json.dumps(data, indent=(4 if pretty else 0))
+            s3.put_object(
+                Body=json_data,
+                Bucket=bucket_name,
+                Key=filename,
+            )
+            return  # Success, exit retry loop
+        except (ValueError, TypeError) as e:
+            # Handle JSON encoding errors (ValueError in older Python, JSONEncodeError in newer)
+            print(f"Error encoding data to JSON for {filename}: {e}")
+            raise  # Don't retry JSON encoding errors
+        except Exception as e:
+            # Check if it's an S3-specific error that shouldn't be retried
+            error_str = str(e).lower()
+            if 'nosuchbucket' in error_str or 'bucket' in error_str and 'not found' in error_str:
+                print(f"S3 bucket {bucket_name} not found when saving {filename}")
+                raise  # Don't retry bucket not found errors
+            
+            if attempt < max_retries - 1:
+                # Add exponential backoff with jitter for concurrent operation safety
+                backoff_time = (2 ** attempt) + random.uniform(0, 1)
+                print(f"Error saving {filename} to S3 (attempt {attempt + 1}/{max_retries}): {e}")
+                print(f"Retrying in {backoff_time:.2f} seconds...")
+                time.sleep(backoff_time)
+            else:
+                print(f"Error saving {filename} to S3 after {max_retries} attempts: {e}")
+                raise  # Re-raise after all retries exhausted
 
 # ──────────────────────────────────────────────────────────────────────────
 # One-time activation key validator
